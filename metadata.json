@@ -1,0 +1,6 @@
+{
+  "name": "游泳池会员管理系统",
+  "description": "专为游泳池内部人员设计的会员管理与扫码核验系统，支持快速登记、QR码生成与救生员摄像扫码核验正常/过期状态。",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
