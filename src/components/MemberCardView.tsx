@@ -19,7 +19,7 @@ import {
   UserPlus
 } from "lucide-react";
 import { Member, SubMember } from "../types";
-import { TRANSLATIONS } from "../translations";
+import { TRANSLATIONS, getNormalizedPlanName } from "../translations";
 import { motion, AnimatePresence } from "motion/react";
 
 interface MemberCardViewProps {
@@ -60,7 +60,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
   const encodedStart = encodeURIComponent(member.startDate);
   const encodedEnd = encodeURIComponent(member.endDate);
   const encodedPhone = encodeURIComponent(selectedMemberPhone || "无");
-  const encodedPlan = encodeURIComponent(member.plan);
+  const encodedPlan = encodeURIComponent(getNormalizedPlanName(member.plan, lang));
 
   // Direct verifiable online link dynamically resolved to current deployment origin
   const currentOrigin = typeof window !== "undefined" ? (window.location.origin + window.location.pathname) : "https://seahorse-vesc-member.pages.dev/";

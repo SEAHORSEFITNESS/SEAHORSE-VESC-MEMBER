@@ -14,7 +14,7 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { Member } from "../types";
-import { TRANSLATIONS } from "../translations";
+import { TRANSLATIONS, getNormalizedPlanName } from "../translations";
 import { motion } from "motion/react";
 
 interface RemindersDialogProps {
@@ -110,7 +110,7 @@ export default function RemindersDialog({
                           <Smartphone className="h-3.5 w-3.5 text-slate-400" />
                           {m.phone}
                         </span>
-                        <span>{t.remindersPlan}: {m.plan}</span>
+                        <span>{t.remindersPlan}: {getNormalizedPlanName(m.plan, lang)}</span>
                       </div>
                       <div className="text-[10.5px] text-slate-400 font-medium">
                         {t.remindersAutomaticDeactivation.replace("{date}", m.endDate)}
@@ -133,9 +133,10 @@ export default function RemindersDialog({
                       {/* Quick reminder message button */}
                       <button
                         onClick={() => {
+                          const normalizedPlan = getNormalizedPlanName(m.plan, lang);
                           const msg = lang === "en" 
-                            ? `Hello ${m.name}, this is Seahorse Fitness Inc. Your swimming membership pass (${m.plan}) is set to expire on ${m.endDate}. To continue enjoying pool access, please stop by our counter or call us at 347-272-2822 to renew. Thank you!`
-                            : `【海马游泳中心】尊贵的会员${m.name}，您的${m.plan}即将于${m.endDate}到期，为了不影响您的日常入水及游泳体验，请您在空闲时间抽空前往柜台，或联系我们的客服（347-272-2822）办理续卡。祝您生活愉快！`;
+                            ? `Hello ${m.name}, this is Seahorse Fitness Inc. Your swimming membership pass (${normalizedPlan}) is set to expire on ${m.endDate}. To continue enjoying pool access, please stop by our counter or call us at 347-272-2822 to renew. Thank you!`
+                            : `【海马游泳中心】尊贵的会员${m.name}，您的${normalizedPlan}即将于${m.endDate}到期，为了不影响您的日常入水及游泳体验，请您在空闲时间抽空前往柜台，或联系我们的客服（347-272-2822）办理续卡。祝您生活愉快！`;
                           
                           navigator.clipboard.writeText(msg);
                           alert(t.smsCopyAlert);

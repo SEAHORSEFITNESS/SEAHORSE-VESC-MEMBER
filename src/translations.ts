@@ -112,8 +112,8 @@ export const TRANSLATIONS = {
     formPrice: "Real Money Paid Amount (RMB)",
     formDatePaid: "Transaction Payment Date",
     formSectionDates: "3. Passage Validity Range",
-    formStartDate: "生效日期 Effective Date (START)",
-    formEndDate: "到期日期 Expiration Date (END)",
+    formStartDate: "Effective Date (START)",
+    formEndDate: "Expiration Date (END)",
     formAutoEstimated: "Auto Estimated",
     formRemarksHeader: "4. Internal Extras & Alert Sent",
     formRemarksLabel: "Extra Remarks / Notes (e.g. medical limits, lockers, swim master)",
@@ -151,16 +151,16 @@ export const TRANSLATIONS = {
     btnShowBack: "Show Back Side",
 
     // Family System Spec
-    familyOptionHeader: "Family Plan Members (随同副卡账户)",
+    familyOptionHeader: "Family Plan Members (Sub-Cards)",
     familyOptionSub: "Family subscriptions support printing distinctive cards for family sub-members using the same plan duration.",
     btnAddFamilyMember: "Add Family Member Info",
     familyMemberName: "Sub-Member Name",
     familyMemberRel: "Relationship",
     familyMemberPhone: "Phone (Optional)",
-    familyRelationSpouse: "Spouse (配偶)",
-    familyRelationChild: "Child (子女)",
-    familyRelationParent: "Parent (父母)",
-    familyRelationOther: "Other (其他)",
+    familyRelationSpouse: "Spouse",
+    familyRelationChild: "Child",
+    familyRelationParent: "Parent",
+    familyRelationOther: "Other",
     familyRemoveBtn: "Remove",
     holderSelectorLabel: "Choose Card Holder to Show/Print:",
     holderPrincipalName: "Principal Holder (主卡 • {id})",
@@ -171,10 +171,10 @@ export const TRANSLATIONS = {
     // Membership plan presets
     presetOnce: "Single Entry (Temporary Session)",
     presetWeek: "Weekly Pass (Swim Tryout)",
-    presetMonth: "Monthly Pass (Regular Swimmer)",
+    presetMonth: "Month Pass",
     presetSeason: "Quarterly Pass (Seasonal Swim)",
-    presetHalfYear: "Half-Year Pass (Semi-Annual Saver)",
-    presetYear: "Annual Pass (Full Year VIP Exclusive)",
+    presetHalfYear: "6-Month Pass",
+    presetYear: "Year Pass",
     presetFamilyYear: "Family Annual Pass (Multi-user Shared Plan)",
     customPlanLabel: "Custom Plan Category"
   },
@@ -345,11 +345,90 @@ export const TRANSLATIONS = {
     // Membership plan presets
     presetOnce: "次卡 (临时体验)",
     presetWeek: "周卡 (游泳体验卡)",
-    presetMonth: "月卡 (常规游泳卡)",
+    presetMonth: "Month Pass",
     presetSeason: "季卡 (季度游泳卡)",
-    presetHalfYear: "半年卡 (双季度优惠)",
-    presetYear: "年卡 (全年尊享卡)",
+    presetHalfYear: "6-Month Pass",
+    presetYear: "Year Pass",
     presetFamilyYear: "家庭年卡 (亲属共享卡)",
-    customPlanLabel: "自定义卡种计划"
+    customPlanLabel: "Custom Plan Category (自定义卡型)"
   }
 };
+
+export function getNormalizedPlanName(plan: string, lang: "en" | "zh"): string {
+  if (!plan) return "";
+  const normalized = plan.toLowerCase().trim();
+
+  if (lang === "en") {
+    if (normalized.includes("month") || normalized.includes("月卡") || normalized.includes("月")) {
+      return "Month Pass";
+    }
+    if (normalized.includes("half-year") || normalized.includes("6-month") || normalized.includes("半年") || normalized.includes("半") || normalized.includes("6月")) {
+      return "6-Month Pass";
+    }
+    if (normalized.includes("year") || normalized.includes("年卡") || normalized.includes("年") || normalized.includes("annual")) {
+      return "Year Pass";
+    }
+    if (normalized.includes("family") || normalized.includes("家庭")) {
+      return "Family Annual Pass";
+    }
+    if (normalized.includes("once") || normalized.includes("single") || normalized.includes("次卡") || normalized.includes("临时")) {
+      return "Single Entry";
+    }
+    if (normalized.includes("week") || normalized.includes("周卡")) {
+      return "Weekly Pass";
+    }
+    if (normalized.includes("custom") || normalized.includes("自定义")) {
+      return "Custom Plan";
+    }
+  } else {
+    // zh mode - keep uniform English standards for the main premium passes, with dual language helpers for specific others.
+    if (normalized.includes("month") || normalized.includes("月卡") || normalized.includes("月")) {
+      return "Month Pass";
+    }
+    if (normalized.includes("half-year") || normalized.includes("6-month") || normalized.includes("半年") || normalized.includes("半") || normalized.includes("6月")) {
+      return "6-Month Pass";
+    }
+    if (normalized.includes("year") || normalized.includes("年卡") || normalized.includes("年") || normalized.includes("annual")) {
+      return "Year Pass";
+    }
+    if (normalized.includes("family") || normalized.includes("家庭")) {
+      return "家庭年卡 (Family Annual Pass)";
+    }
+    if (normalized.includes("once") || normalized.includes("single") || normalized.includes("次卡") || normalized.includes("临时")) {
+      return "次卡 (Single Entry)";
+    }
+    if (normalized.includes("week") || normalized.includes("周卡")) {
+      return "周卡 (Weekly Pass)";
+    }
+    if (normalized.includes("custom") || normalized.includes("自定义")) {
+      return "自定义卡型 (Custom Plan)";
+    }
+  }
+
+  return plan;
+}
+
+export function formatPhoneNumber(val: string): string {
+  if (!val) return "";
+  const digits = val.replace(/\D/g, "");
+  
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)})${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  
+  if (digits.length === 11) {
+    if (digits.startsWith("1")) {
+      return `(${digits.slice(1, 4)})${digits.slice(4, 7)}-${digits.slice(7)}`;
+    }
+    return `(${digits.slice(0, 3)})${digits.slice(3, 7)}-${digits.slice(7)}`;
+  }
+
+  if (digits.length <= 3) {
+    return digits;
+  }
+  if (digits.length <= 6) {
+    return `(${digits.slice(0, 3)})${digits.slice(3)}`;
+  }
+  return `(${digits.slice(0, 3)})${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+}
+

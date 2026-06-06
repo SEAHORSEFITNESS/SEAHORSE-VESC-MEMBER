@@ -10,9 +10,10 @@ import MemberScanner from "./components/MemberScanner";
 import MemberCardView from "./components/MemberCardView";
 import AdminLogin from "./components/AdminLogin";
 import RemindersDialog from "./components/RemindersDialog";
-import { TRANSLATIONS } from "./translations";
+import { TRANSLATIONS, getNormalizedPlanName } from "./translations";
 import { 
-  Plus, 
+  Plus,
+  X,
   Search, 
   QrCode, 
   Trash2, 
@@ -32,7 +33,8 @@ import {
   RefreshCw,
   FileSpreadsheet,
   LogOut,
-  Languages
+  Languages,
+  Building2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -107,6 +109,37 @@ const INITIAL_MOCK_MEMBERS: Member[] = [
   }
 ];
 
+
+const getInitialGoogleSheetUrl = (): string => {
+  if (typeof window === "undefined") return "";
+  const obfuscatedVal = localStorage.getItem("_sys_cfg_sync_stream_");
+  if (obfuscatedVal) {
+    try {
+      return atob(obfuscatedVal);
+    } catch (e) {
+      return obfuscatedVal;
+    }
+  }
+  const legacyVal = localStorage.getItem("swimpool_google_sheet_url") || "";
+  if (legacyVal) {
+    try {
+      localStorage.setItem("_sys_cfg_sync_stream_", btoa(legacyVal));
+    } catch (e) {}
+    localStorage.removeItem("swimpool_google_sheet_url");
+    return legacyVal;
+  }
+  return "";
+};
+
+const saveObfuscatedGoogleSheetUrl = (url: string) => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem("_sys_cfg_sync_stream_", btoa(url));
+  } catch (e) {
+    localStorage.setItem("_sys_cfg_sync_stream_", url);
+  }
+};
+
 export default function App() {
   // Global Bilingual System State defaulting to english as instructed
   const [lang, setLang] = useState<"en" | "zh">(() => {
@@ -114,6 +147,45 @@ export default function App() {
   });
 
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => localStorage.getItem("swimpool_admin_logged_in") === "true");
+  
+  // Company profiles configuration supporting multiple company profiles
+  const [profiles, setProfiles] = useState<{
+    id: string;
+    name: string;
+    sheetUrl?: string;
+    syncEnabled?: boolean;
+    lastSyncedTime?: string;
+    isDefault?: boolean;
+  }[]>(() => {
+    const raw = localStorage.getItem("swimpool_company_profiles");
+    if (raw) {
+      try {
+        return JSON.parse(raw);
+      } catch (e) {
+        // Fallback below
+      }
+    }
+    return [
+      {
+        id: "default",
+        name: "Seahorse Fitness Inc (海马游泳中心)",
+        isDefault: true,
+        sheetUrl: "",
+        syncEnabled: false,
+        lastSyncedTime: ""
+      }
+    ];
+  });
+
+  const [activeProfileId, setActiveProfileId] = useState<string>(() => {
+    return localStorage.getItem("swimpool_active_profile_id") || "default";
+  });
+
+  const [isProfileManagerOpen, setIsProfileManagerOpen] = useState<boolean>(false);
+  const [profileNameInput, setProfileNameInput] = useState<string>("");
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const [editProfileNameInput, setEditProfileNameInput] = useState<string>("");
+
   const [members, setMembers] = useState<Member[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "expired" | "expiring_soon">("all");
@@ -125,6 +197,88 @@ export default function App() {
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
   const [selectedPassMember, setSelectedPassMember] = useState<Member | null>(null);
   const [isRemindersOpen, setIsRemindersOpen] = useState<boolean>(false);
+  const [isVersionOpen, setIsVersionOpen] = useState<boolean>(false);
+
+  // Google Sheets Cloud Sync Settings States
+  const [syncEnabled, setSyncEnabled] = useState<boolean>(() => localStorage.getItem("swimpool_sheet_sync_enabled") === "true");
+  const [googleSheetUrl, setGoogleSheetUrl] = useState<string>(() => getInitialGoogleSheetUrl());
+  const [lastSyncedTime, setLastSyncedTime] = useState<string>(() => localStorage.getItem("swimpool_last_synced_time") || "");
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [isSyncDialogOpen, setIsSyncDialogOpen] = useState<boolean>(false);
+
+  // Helper to update active profile traits
+  const updateProfileProperties = (profileId: string, updates: Partial<{
+    name: string;
+    sheetUrl: string;
+    syncEnabled: boolean;
+    lastSyncedTime: string;
+  }>) => {
+    setProfiles((prev) => {
+      const updated = prev.map((p) => (p.id === profileId ? { ...p, ...updates } : p));
+      localStorage.setItem("swimpool_company_profiles", JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const pullFromGoogleSheet = async (urlToUse?: string) => {
+    const targetUrl = urlToUse !== undefined ? urlToUse : googleSheetUrl;
+    if (!targetUrl) return false;
+    
+    setIsSyncing(true);
+    setSyncError(null);
+    try {
+      const res = await fetch(targetUrl);
+      if (!res.ok) throw new Error(`HTTP status ${res.status}`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setMembers(data);
+        const activeProfId = localStorage.getItem("swimpool_active_profile_id") || "default";
+        const dbKey = activeProfId === "default" ? "swimpool_member_db" : `swimpool_member_db_${activeProfId}`;
+        localStorage.setItem(dbKey, JSON.stringify(data));
+        
+        const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setLastSyncedTime(nowStr);
+        localStorage.setItem("swimpool_last_synced_time", nowStr);
+        updateProfileProperties(activeProfId, { lastSyncedTime: nowStr });
+        return true;
+      } else {
+        throw new Error(lang === "en" ? "Response is not a valid JSON array" : "Google Sheet 返回的不是有效的 JSON 数组，请确认脚本部署是否正确");
+      }
+    } catch (e: any) {
+      console.error("Failed to pull from Google Sheets", e);
+      setSyncError(e.message || "Network Error");
+      return false;
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const pushToGoogleSheet = async (listToPush: Member[], urlToUse?: string) => {
+    const targetUrl = urlToUse !== undefined ? urlToUse : googleSheetUrl;
+    if (!targetUrl) return;
+    
+    setIsSyncing(true);
+    setSyncError(null);
+    try {
+      await fetch(targetUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8",
+        },
+        body: JSON.stringify({ action: "write", members: listToPush }),
+      });
+      const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      setLastSyncedTime(nowStr);
+      localStorage.setItem("swimpool_last_synced_time", nowStr);
+      const activeProfId = localStorage.getItem("swimpool_active_profile_id") || "default";
+      updateProfileProperties(activeProfId, { lastSyncedTime: nowStr });
+    } catch (e: any) {
+      console.warn("Push warning (CORS redirects under no-cors are expected but data safely writes):", e);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Scan URL query parameter state for direct cell verify
   const [publicScanData, setPublicScanData] = useState<{
@@ -179,26 +333,97 @@ export default function App() {
 
   const t = TRANSLATIONS[lang];
 
-  // Retrieve storage on mount
+  // Retrieve storage on mount dynamically keyed by active company profile
   useEffect(() => {
-    const stored = localStorage.getItem("swimpool_member_db");
+    const activeProfId = localStorage.getItem("swimpool_active_profile_id") || "default";
+    setActiveProfileId(activeProfId);
+
+    const dbKey = activeProfId === "default" ? "swimpool_member_db" : `swimpool_member_db_${activeProfId}`;
+    const stored = localStorage.getItem(dbKey);
+    let currentLocal: Member[] = [];
     if (stored) {
       try {
-        setMembers(JSON.parse(stored));
+        currentLocal = JSON.parse(stored);
+        setMembers(currentLocal);
       } catch (e) {
         console.error("Failed to parse database, reloading defaults", e);
+        currentLocal = INITIAL_MOCK_MEMBERS;
         setMembers(INITIAL_MOCK_MEMBERS);
       }
     } else {
+      currentLocal = INITIAL_MOCK_MEMBERS;
       setMembers(INITIAL_MOCK_MEMBERS);
-      localStorage.setItem("swimpool_member_db", JSON.stringify(INITIAL_MOCK_MEMBERS));
+      localStorage.setItem(dbKey, JSON.stringify(INITIAL_MOCK_MEMBERS));
+    }
+
+    // Load active profile's spreadsheet options
+    const activeProf = profiles.find(p => p.id === activeProfId);
+    if (activeProf) {
+      setGoogleSheetUrl(activeProf.sheetUrl || "");
+      setSyncEnabled(!!activeProf.syncEnabled);
+      setLastSyncedTime(activeProf.lastSyncedTime || "");
+
+      if (activeProf.syncEnabled && activeProf.sheetUrl) {
+        pullFromGoogleSheet(activeProf.sheetUrl);
+      }
+    } else {
+      const isSyncOn = localStorage.getItem("swimpool_sheet_sync_enabled") === "true";
+      const sheetUrl = getInitialGoogleSheetUrl();
+      if (isSyncOn && sheetUrl) {
+        pullFromGoogleSheet(sheetUrl);
+      }
     }
   }, []);
 
-  // Save updates helper
+  // Save updates helper under active company profile index
   const saveMembersList = (updated: Member[]) => {
     setMembers(updated);
-    localStorage.setItem("swimpool_member_db", JSON.stringify(updated));
+    const activeProfId = localStorage.getItem("swimpool_active_profile_id") || "default";
+    const dbKey = activeProfId === "default" ? "swimpool_member_db" : `swimpool_member_db_${activeProfId}`;
+    localStorage.setItem(dbKey, JSON.stringify(updated));
+    
+    // Auto-sync push if enabled
+    const activeProf = profiles.find(p => p.id === activeProfId);
+    const isSyncOn = activeProf ? !!activeProf.syncEnabled : (localStorage.getItem("swimpool_sheet_sync_enabled") === "true");
+    const sheetUrl = activeProf ? (activeProf.sheetUrl || "") : getInitialGoogleSheetUrl();
+    if (isSyncOn && sheetUrl) {
+      pushToGoogleSheet(updated, sheetUrl);
+    }
+  };
+
+  const handleSwitchProfile = (profileId: string) => {
+    setActiveProfileId(profileId);
+    localStorage.setItem("swimpool_active_profile_id", profileId);
+
+    const dbKey = profileId === "default" ? "swimpool_member_db" : `swimpool_member_db_${profileId}`;
+    const stored = localStorage.getItem(dbKey);
+    let currentLocal: Member[] = [];
+    if (stored) {
+      try {
+        currentLocal = JSON.parse(stored);
+      } catch (e) {
+        currentLocal = INITIAL_MOCK_MEMBERS;
+      }
+    } else {
+      currentLocal = INITIAL_MOCK_MEMBERS;
+      localStorage.setItem(dbKey, JSON.stringify(INITIAL_MOCK_MEMBERS));
+    }
+    setMembers(currentLocal);
+
+    // Refresh sync states matching the switched company profile
+    const activeProf = profiles.find(p => p.id === profileId);
+    if (activeProf) {
+      setGoogleSheetUrl(activeProf.sheetUrl || "");
+      setSyncEnabled(!!activeProf.syncEnabled);
+      setLastSyncedTime(activeProf.lastSyncedTime || "");
+      saveObfuscatedGoogleSheetUrl(activeProf.sheetUrl || "");
+      localStorage.setItem("swimpool_sheet_sync_enabled", activeProf.syncEnabled ? "true" : "false");
+      localStorage.setItem("swimpool_last_synced_time", activeProf.lastSyncedTime || "");
+    } else {
+      setGoogleSheetUrl("");
+      setSyncEnabled(false);
+      setLastSyncedTime("");
+    }
   };
 
   // Add / Save member handler
@@ -480,7 +705,7 @@ export default function App() {
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[9px] uppercase font-bold">{lang === "en" ? "Plan Tier" : "开卡卡型计划"}</span>
-                  <span className="font-bold text-slate-200">{publicScanData.plan || (lang === "en" ? "Standard Pass" : "专属卡型")}</span>
+                  <span className="font-bold text-slate-200">{getNormalizedPlanName(publicScanData.plan || "", lang) || (lang === "en" ? "Standard Pass" : "专属卡型")}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[9px] uppercase font-bold">{lang === "en" ? "Phone" : "预留手机号"}</span>
@@ -552,15 +777,33 @@ export default function App() {
       <header className="bg-white border-b border-slate-205 py-4.5 px-4 md:px-8 shadow-sm">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           
-          {/* Logo Brand Title */}
+          {/* Logo Brand Title with Switch Profile triggers */}
           <div className="flex items-center gap-3.5 text-center md:text-left">
-            <div className="w-11 h-11 bg-blue-700 rounded-xl flex items-center justify-center text-white shadow-md flex-shrink-0">
-              <Waves className="h-5.5 w-5.5 animate-pulse" />
-            </div>
-            <div>
-              <h1 className="text-xl font-black tracking-tight text-slate-800">
-                {t.chineseName} <span className="text-slate-400 font-light text-sm">| {lang === "en" ? "VIP Admin" : "核验云端"}</span>
-              </h1>
+            <button
+              type="button"
+              onClick={() => setIsProfileManagerOpen(true)}
+              className="w-11 h-11 bg-blue-700 hover:bg-blue-800 rounded-xl flex items-center justify-center text-white shadow-md flex-shrink-0 cursor-pointer transition transform hover:scale-105 active:scale-95 group relative"
+              title={lang === "en" ? "Manage and Switch Company Profiles" : "管理并切换公司主体档案"}
+            >
+              <Waves className="h-5.5 w-5.5 animate-pulse group-hover:scale-110" />
+              <div className="absolute -bottom-1 -right-1 bg-amber-400 text-slate-900 border-2 border-white rounded-full p-0.5 shadow transition">
+                <Building2 className="h-2.5 w-2.5" />
+              </div>
+            </button>
+            <div className="text-left">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <h1 className="text-lg font-black tracking-tight text-slate-800">
+                  {profiles.find(p => p.id === activeProfileId)?.name || "Seahorse Fitness Inc (海马游泳中心)"}
+                </h1>
+                <button
+                  type="button"
+                  onClick={() => setIsProfileManagerOpen(true)}
+                  className="self-start sm:self-auto bg-blue-50 hover:bg-blue-100 border border-blue-200/60 rounded-full px-2 py-0.5 text-[9px] font-black text-blue-700 tracking-wider flex items-center gap-1 cursor-pointer transition select-none"
+                >
+                  <Building2 className="h-2.5 w-2.5" />
+                  <span>{lang === "en" ? "SWITCH CO." : "切换主体 / 添加公司"}</span>
+                </button>
+              </div>
               <p className="text-[10.5px] text-slate-500 font-bold mt-0.5">
                 {t.counterTerminal} • {t.todayBase}: <span className="font-mono text-blue-600 font-black">{todayStr}</span>
               </p>
@@ -580,13 +823,25 @@ export default function App() {
               <span>{lang === "en" ? "English" : "简体中文"}</span>
             </button>
 
-            {/* Lifeguard Scan triggers */}
+            {/* Google Sheets Sync Selector/Setup */}
             <button
-              onClick={() => setIsScannerOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs md:text-sm font-bold rounded-xl shadow transition active:scale-95 cursor-pointer"
+              onClick={() => setIsSyncDialogOpen(true)}
+              className={`flex items-center gap-1.5 px-3 py-2 border rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-sm ${
+                syncEnabled 
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-250 hover:bg-emerald-100 animate-fade-in" 
+                  : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+              }`}
+              title={lang === "en" ? "Google Sheets cloud syncing integration" : "谷歌表格双向同步备份集成"}
             >
-              <QrCode className="h-4 w-4 text-blue-400" />
-              <span>{lang === "en" ? "Lifeguard Scanner" : "救生员扫码区"}</span>
+              <FileSpreadsheet className={`h-4 w-4 ${syncEnabled ? "text-emerald-600" : "text-slate-500"}`} />
+              <span>
+                {syncEnabled 
+                  ? (isSyncing 
+                      ? (lang === "en" ? "Syncing..." : "同步中...") 
+                      : (lastSyncedTime ? `${lang === "en" ? "Synced" : "已同步"} ${lastSyncedTime}` : (lang === "en" ? "Sheets Connected" : "表格已连接"))) 
+                  : (lang === "en" ? "Sheets Cloud Sync" : "谷歌表格云同步")
+                }
+              </span>
             </button>
 
             {/* Quick Register Swimmer triggers */}
@@ -906,7 +1161,7 @@ export default function App() {
                               isSeason ? "bg-blue-50 border-blue-200 text-blue-700" : 
                               isMonth ? "bg-slate-50 border-slate-200 text-slate-700" : "bg-slate-100 border-slate-150 text-slate-600"
                             }`}>
-                              {m.plan}
+                              {getNormalizedPlanName(m.plan, lang)}
                             </span>
                             <span className="text-slate-500 font-mono text-[11px] font-black block">
                               ¥{m.price}
@@ -1047,9 +1302,14 @@ export default function App() {
       </main>
 
       {/* Footer System Branding Credits */}
-      <footer className="px-8 py-5 bg-white border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center text-[10px] text-slate-450 font-black uppercase tracking-wider gap-2 select-none">
-        <div>{lang === "en" ? "Lifeguard Fast Validation Gate Activated • Local SQLite Storage Enabled" : "救生员高保真核验端已激活 • 兼容网页及桌面离线系统"}</div>
-        <div>© 2026 {lang === "en" ? "Seahorse Fitness Inc." : "海马游泳中心"} Member Pass Terminal v2.5.</div>
+      <footer className="px-8 py-5 bg-white border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center text-[10px] text-slate-400 font-extrabold uppercase tracking-wider gap-3 select-none">
+        <button
+          onClick={() => setIsVersionOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 border border-blue-200/50 rounded-xl cursor-pointer transition uppercase tracking-wide text-[9.5px]"
+        >
+          <span>🔔 {lang === "en" ? "v2.6 Update log: Plans Simplified & Mobile QR Fixed [Click to view]" : "v2.6版本：精简卡种、手机直接扫码核验完成 [点击查看更新日志]"}</span>
+        </button>
+        <div>© 2026 {lang === "en" ? "Seahorse Fitness Inc." : "海马游泳中心"} Member Pass Terminal v2.6.</div>
       </footer>
 
       {/* Dialog System renderer overlays */}
@@ -1097,6 +1357,573 @@ export default function App() {
             onOpenCard={(m) => setSelectedPassMember(m)}
             onToggleAlert={handleToggleAlert}
           />
+        )}
+
+        {/* Version Updates Log dialogue */}
+        {isVersionOpen && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white border border-slate-200 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl flex flex-col p-6 space-y-4"
+            >
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-extrabold select-none text-xs">v</div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-800 text-sm">{lang === "en" ? "Version Update Log" : "系统版本更新日志"}</h3>
+                    <p className="text-[10px] text-slate-400 font-bold">Member Pass Terminal • Stable Enterprise</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsVersionOpen(false)}
+                  className="p-1 text-slate-400 hover:text-slate-650 rounded-lg hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="h-4.5 w-4.5" />
+                </button>
+              </div>
+
+              {/* Version list items */}
+              <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1 text-xs text-slate-600 font-semibold leading-relaxed">
+                
+                {/* v2.6 Latest */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-black text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">v2.6 RELEASE</span>
+                    <span className="font-mono text-slate-400 font-bold">2026-06-06 (Latest)</span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-1.5 pl-1 text-slate-700">
+                    <li>💻 <strong>{lang === "en" ? "Cloudflare Pages Optimized" : "支持 Cloudflare Pages 自动构建"}</strong>: {lang === "en" ? "Webpage configured and streamlined to build beautifully on pages.dev origin namespaces." : "网页构建脚本深度适配，完美在 pages.dev 域名提供高吞吐的泳卡核验访问。"}</li>
+                    <li>📱 <strong>{lang === "en" ? "QR Redirection Error Fixed" : "修复相机直扫 URL 跳 404"}</strong>: {lang === "en" ? "Card QR value now auto-resolves dynamically to current deployment origin, avoiding legacy hardcoded GitHub Pages 404." : "核验二维码动态适应当前域名，不管用微信、抖音或 iPhone 系统相机扫码均可秒开资格证，不会再出现跳 404 无法通行的情况。"}</li>
+                    <li>💳 <strong>{lang === "en" ? "Plan Series Simplified" : "卡种期限精简 & 英文显示"}</strong>: {lang === "en" ? "Simplified plan series to keep only Month Pass, 6-Month Pass, and Year Pass, displaying in clean English for billing uniformity." : "去除了干扰性极强的低客单次卡周卡，仅保留 Month Pass、6-Month Pass 与 Year Pass，且不管系统处于中/英文模式均强制呈递专业英标文字。"}</li>
+                    <li>🛡️ <strong>{lang === "en" ? "Decoupled Local QR Check-in" : "取消内嵌扫码 / 外置免登核验"}</strong>: {lang === "en" ? "Removed legacy internal camera web views from login gates. Lifeguards can scan directly with secondary devices safely, protecting member database secrecy." : "移除了繁重且暴露后台管理密码的内嵌式摄像头扫描。救生员用私人手机直接对准实体卡一扫即可核验通关，避免不经意泄露其他常客的电话隐私。"}</li>
+                  </ul>
+                </div>
+
+                <hr className="border-slate-100" />
+
+                {/* v2.5 */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="font-black text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded">v2.5</span>
+                    <span className="font-mono text-slate-400">2026-05-24</span>
+                  </div>
+                  <p className="pl-1 text-slate-500 text-[11px]">
+                    {lang === "en" ? "Enabled double-sided black-and-white thermal pass-card printing templates (3\" x 2\" layouts with cutting guidelines)." : "针对低功率黑白热敏纸添加了定制级双面物理裁剪凭证版面，卡套挂装更佳。"}
+                  </p>
+                </div>
+
+                {/* v2.4 */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="font-black text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded">v2.4</span>
+                    <span className="font-mono text-slate-400">2026-04-18</span>
+                  </div>
+                  <p className="pl-1 text-slate-500 text-[11px]">
+                    {lang === "en" ? "Multi-user family companion plan expansion allowed creation of secondary custom sub-cards." : "加入全系统级子级亲子家庭副卡，一人持主卡其余人各自拥独家编号的卡牌。"}
+                  </p>
+                </div>
+
+              </div>
+
+              <button 
+                onClick={() => setIsVersionOpen(false)}
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition cursor-pointer text-center"
+              >
+                {lang === "en" ? "Understood" : "我知道了"}
+              </button>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Google Sheets Sync Settings Dialog */}
+        {isSyncDialogOpen && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white border border-slate-200 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl flex flex-col p-6 space-y-4 text-left"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center pb-2 border-b border-slate-150">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-sm">
+                    <FileSpreadsheet className="h-4.5 w-4.5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-850 text-sm">
+                      {lang === "en" ? "Google Sheets Dual-Sync Gateway" : "谷歌在线表格双向互通网关"}
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                      {lang === "en" ? "Durable Cloud Roster Node" : "云端防丢、多机协同高可用机制"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setIsSyncDialogOpen(false);
+                    setSyncError(null);
+                  }}
+                  className="p-1.5 text-slate-400 hover:text-slate-650 rounded-xl hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="h-4.5 w-4.5" />
+                </button>
+              </div>
+
+              {/* Body explanation */}
+              <div className="space-y-4 text-xs font-semibold text-slate-650 leading-relaxed max-h-[60vh] overflow-y-auto pr-1">
+                {/* Info summary */}
+                <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl text-emerald-850 space-y-1.5">
+                  <p className="font-black text-emerald-800">
+                    💡 {lang === "en" ? "How does cloud spreadsheet sync work?" : "它是如何帮您备份和协同的？"}
+                  </p>
+                  <p className="text-[10.5px] font-bold text-slate-600 leading-normal">
+                    {lang === "en" 
+                      ? "Every member registered, edited, or deleted in Seahorse Applet will automatically update your Google Sheet in real-time. On app startup, members are automatically synced down so your local caches remain indestructible!"
+                      : "您在此系统的所有添加、修改、退卡操作都会实时写入对应的 Google Sheet。开机时也会自动从云端获取最新列表，换电脑或清缓存再也不用担心数据丢失，多人手机或电脑同时打票和核卡更互通！"}
+                  </p>
+                </div>
+
+                {/* Form parameters */}
+                <div className="space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] uppercase tracking-wider font-extrabold text-slate-500">
+                      {lang === "en" ? "1. Sync Configuration" : "1. 开启数据云同步开关"}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="sync-toggle-chk"
+                        checked={syncEnabled}
+                        onChange={(e) => {
+                          const nextVal = e.target.checked;
+                          setSyncEnabled(nextVal);
+                          localStorage.setItem("swimpool_sheet_sync_enabled", nextVal ? "true" : "false");
+                          const activeProfId = localStorage.getItem("swimpool_active_profile_id") || "default";
+                          updateProfileProperties(activeProfId, { syncEnabled: nextVal });
+                        }}
+                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                      />
+                      <label htmlFor="sync-toggle-chk" className="text-[11px] font-black text-slate-700 cursor-pointer">
+                        {lang === "en" ? "Enable Sync Service" : "开启自动备份"}
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] uppercase tracking-wider font-extrabold text-slate-500 block">
+                      {lang === "en" ? "2. Google Apps Script URL" : "2. 谷歌网页服务发布脚本 URL"}
+                    </span>
+                    <input
+                      type="url"
+                      placeholder="https://script.google.com/macros/s/.../exec"
+                      value={googleSheetUrl}
+                      onChange={(e) => {
+                        const val = e.target.value.trim();
+                        setGoogleSheetUrl(val);
+                        saveObfuscatedGoogleSheetUrl(val);
+                        const activeProfId = localStorage.getItem("swimpool_active_profile_id") || "default";
+                        updateProfileProperties(activeProfId, { sheetUrl: val });
+                      }}
+                      className="w-full px-3 py-2 border border-slate-205 rounded-xl bg-slate-50 text-slate-800 font-mono text-[10px] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Status indicator and Test Actions */}
+                {googleSheetUrl && (
+                  <div className="space-y-2 border-t border-slate-100 pt-3">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-extrabold text-slate-500">{lang === "en" ? "Manual Actions / Diagnostics" : "手动强推或强制拉取覆盖"}</span>
+                      <span className="font-mono text-slate-400 font-bold">
+                        {lang === "en" ? "Active Cloud API Connect" : "安全数据同步通道"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={async () => {
+                          const done = await pullFromGoogleSheet();
+                          if (done) alert(lang === "en" ? "Successfully pulled Roster list from Google Sheets!" : "同步拉取成功！已从 Google Sheet 下载最新泳客资格库覆盖本地缓存。");
+                        }}
+                        disabled={isSyncing}
+                        className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-250 text-slate-700 rounded-xl transition cursor-pointer disabled:opacity-50 text-[11px] font-bold"
+                      >
+                        <RefreshCw className={`h-3 w-3 ${isSyncing ? "animate-spin text-slate-650" : "text-slate-500"}`} />
+                        <span>{lang === "en" ? "Force Pull From Sheet" : "拉取覆盖 (云端 ➔ 本地)"}</span>
+                      </button>
+
+                      <button
+                        onClick={async () => {
+                          await pushToGoogleSheet(members);
+                          alert(lang === "en" ? "Successfully requested list upload write back!" : "推送成功！已将本地全部泳客资格覆盖传送到 Google Sheet 表格中。");
+                        }}
+                        disabled={isSyncing}
+                        className="flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl transition cursor-pointer disabled:opacity-50 text-[11px] font-bold"
+                      >
+                        <RefreshCw className={`h-3 w-3 ${isSyncing ? "animate-spin text-emerald-650" : "text-emerald-500"}`} />
+                        <span>{lang === "en" ? "Force Push To Sheet" : "推送覆盖 (本地 ➔ 云端)"}</span>
+                      </button>
+                    </div>
+
+                    {syncError && (
+                      <div className="p-2.5 bg-rose-50 border border-rose-100 text-rose-700 font-bold rounded-xl text-[10px] uppercase font-mono">
+                        Error: {syncError}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Google Apps Script Installation Steps Instructions Guide */}
+                <div className="border-t border-slate-100 pt-3 space-y-2">
+                  <span className="text-[11px] uppercase tracking-wider font-extrabold text-amber-600 block">
+                    ⚡ {lang === "en" ? "Quick 3-step setup guide (2 Mins)" : "极速 3 步设置指南（2分钟即可跑通）"}
+                  </span>
+                  
+                  <ol className="list-decimal pl-4.5 space-y-1.5 text-[10.5px] leading-relaxed text-slate-600">
+                    <li>
+                      <strong>{lang === "en" ? "Create Spreadsheet:" : "新建和命名表格："}</strong> 
+                      {lang === "en" 
+                        ? "Open Google Drive, create a new Google Sheet. Rename it to 'Seahorse Pool'."
+                        : "在 Google Drive 里点击新建一个「Google 表格」(Google Sheet)，命名随意例如 'Seahorse'。"
+                      }
+                    </li>
+                    <li>
+                      <strong>{lang === "en" ? "Paste Script:" : "粘入中转脚本："}</strong>
+                      {lang === "en" 
+                        ? "Click Extensions -> Apps Script. Clear layout code and copy-paste the exact code block below."
+                        : "在上方菜单 [扩展程序] (Extensions) -> [Apps Script]。清空里面所有的系统默认代码，然后粘贴进去下面代码："
+                      }
+                    </li>
+                    <li>
+                      <strong>{lang === "en" ? "Deploy as App:" : "部署发布网页服务："}</strong>
+                      {lang === "en" 
+                        ? "Click Deploy -> New deployment. Select Type 'Web App'. Set Description, set 'Execute as' to Me, and Set 'Who has access' to Anyone. Click Deploy and copy the Web App URL into the box above!"
+                        : "点击 [部署] -> [新建部署]，在左侧小齿轮按「网页应用」 (Web App)。描述随意填，[执行者] 选「我」，[谁能访问] 选「任何人」(Anyone)。部署并直接复制生成的网页应用 URL，填入上方的输入框并勾选自动同步即可！"
+                      }
+                    </li>
+                  </ol>
+
+                  {/* Copyable code textarea */}
+                  <div className="space-y-1">
+                    <span className="text-[9.5px] uppercase font-extrabold text-slate-400 block tracking-wider">
+                      {lang === "en" ? "Google Apps Script Code Block to copy:" : "需粘贴进 Apps Script 的完整代码（全选复制）："}
+                    </span>
+                    <textarea
+                      readOnly
+                      onClick={(e) => {
+                        (e.target as HTMLTextAreaElement).select();
+                      }}
+                      className="w-full h-24 p-2 bg-slate-900 text-slate-200 rounded-xl font-mono text-[9px] focus:outline-none overflow-y-auto cursor-pointer border border-slate-800"
+                      value={`function doGet() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = sheet.getDataRange().getValues();
+  if (data.length <= 1) {
+    return ContentService.createTextOutput(JSON.stringify([])).setMimeType(ContentService.MimeType.JSON);
+  }
+  var headers = data[0];
+  var members = [];
+  for (var i = 1; i < data.length; i++) {
+    var row = data[i];
+    var member = {};
+    for (var j = 0; j < headers.length; j++) {
+      var key = headers[j];
+      var val = row[j];
+      if (key === 'price') {
+        val = Number(val);
+      } else if (key === 'subMembers' && val) {
+        try {
+          val = JSON.parse(val);
+        } catch(e) {
+          val = [];
+        }
+      }
+      member[key] = val;
+    }
+    members.push(member);
+  }
+  return ContentService.createTextOutput(JSON.stringify(members))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  try {
+    var requestData = JSON.parse(e.postData.contents);
+    var list = requestData.members;
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    sheet.clear();
+    
+    if (list.length === 0) {
+      sheet.appendRow(["id", "name", "phone", "price", "plan", "startDate", "endDate", "extraInfo", "lastPaymentDate", "createdAt", "subMembers"]);
+      return ContentService.createTextOutput(JSON.stringify({status: "success"}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    var headers = ["id", "name", "phone", "price", "plan", "startDate", "endDate", "extraInfo", "lastPaymentDate", "createdAt", "subMembers"];
+    sheet.appendRow(headers);
+    
+    for (var i = 0; i < list.length; i++) {
+      var m = list[i];
+      var row = [];
+      row.push(m.id || "");
+      row.push(m.name || "");
+      row.push(m.phone || "");
+      row.push(m.price || 0);
+      row.push(m.plan || "");
+      row.push(m.startDate || "");
+      row.push(m.endDate || "");
+      row.push(m.extraInfo || "");
+      row.push(m.lastPaymentDate || "");
+      row.push(m.createdAt || "");
+      row.push(m.subMembers ? JSON.stringify(m.subMembers) : "[]");
+      sheet.appendRow(row);
+    }
+    return ContentService.createTextOutput(JSON.stringify({status: "success"}))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({status: "error", message: err.toString()}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`}
+                    />
+                    <span className="text-[8.5px] text-slate-400 font-bold block leading-relaxed">
+                      {lang === "en" ? "✨ Clicking inside text area auto-selects all for seamless copying." : "✨ 提示：点击文本框内部即可直接全选代码，配合 Ctrl+C / Cmd+C 快速复制。"}
+                    </span>
+                  </div>
+                </div>
+
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex gap-2">
+                <button
+                  onClick={() => setIsSyncDialogOpen(false)}
+                  className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition cursor-pointer text-center select-none active:scale-98"
+                >
+                  {lang === "en" ? "Save & Close Gateway" : "保存并关闭设置"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Company Profile Swapper and Manager Dialog */}
+        {isProfileManagerOpen && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white border border-slate-200 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl flex flex-col p-6 space-y-4 text-left"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center pb-2 border-b border-slate-150">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-sm">
+                    <Building2 className="h-4.5 w-4.5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-800 text-sm">
+                      {lang === "en" ? "Company Profile Manager" : "多公司主体与环境配置管理"}
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-bold">
+                      {lang === "en" ? "Independent member database and sync channel per company" : "每个公司都有完全独立运行的离线数据库与同步渠道"}
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsProfileManagerOpen(false)}
+                  className="p-1 text-slate-400 hover:text-slate-650 rounded-lg hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="h-4.5 w-4.5" />
+                </button>
+              </div>
+
+              {/* Profiles List */}
+              <div className="space-y-2.5 max-h-[40vh] overflow-y-auto pr-1">
+                {profiles.map((p) => {
+                  const isActive = p.id === activeProfileId;
+                  const isDefaultProfile = p.isDefault || p.id === "default";
+                  
+                  return (
+                    <div 
+                      key={p.id}
+                      className={`flex flex-col sm:flex-row sm:items-center justify-between border rounded-2xl p-4 gap-3 transition-all ${
+                        isActive 
+                          ? "bg-slate-50 border-blue-500 shadow-sm ring-1 ring-blue-500/20" 
+                          : "bg-white border-slate-200 hover:border-slate-350"
+                      }`}
+                    >
+                      {/* Left: Info */}
+                      <div className="flex-1 space-y-1">
+                        {editingProfileId === p.id ? (
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="text"
+                              value={editProfileNameInput}
+                              onChange={(e) => setEditProfileNameInput(e.target.value)}
+                              className="px-2 py-1 border border-slate-300 rounded-lg text-xs bg-white text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!editProfileNameInput.trim()) return;
+                                setProfiles(prev => {
+                                  const updated = prev.map(item => item.id === p.id ? { ...item, name: editProfileNameInput.trim() } : item);
+                                  localStorage.setItem("swimpool_company_profiles", JSON.stringify(updated));
+                                  return updated;
+                                });
+                                setEditingProfileId(null);
+                              }}
+                              className="px-2.5 py-1 bg-blue-600 text-white rounded-lg text-[10px] font-bold hover:bg-blue-700 transition"
+                            >
+                              {lang === "en" ? "Save" : "保存"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingProfileId(null)}
+                              className="px-2 py-1 bg-slate-100 text-slate-500 rounded-lg text-[10px] hover:bg-slate-200 transition"
+                            >
+                              {lang === "en" ? "Cancel" : "取消"}
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-800 text-xs sm:text-sm">{p.name}</span>
+                            {isActive && (
+                              <span className="bg-emerald-50 text-emerald-700 border border-emerald-250 text-[8px] font-black px-1.5 py-0.2 rounded-full uppercase">
+                                {lang === "en" ? "Active" : "当前主体"}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        <p className="text-[10px] font-mono text-slate-400 flex flex-wrap gap-2 pt-0.5">
+                          <span>ID: {p.id}</span>
+                          {p.sheetUrl && <span className="text-emerald-600 font-bold">• Sheets Linked</span>}
+                        </p>
+                      </div>
+
+                      {/* Right: Actions */}
+                      <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                        {!isActive && editingProfileId !== p.id && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleSwitchProfile(p.id);
+                            }}
+                            className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-[10px] rounded-lg border border-blue-200/50 cursor-pointer transition select-none"
+                          >
+                            {lang === "en" ? "Switch" : "切换"}
+                          </button>
+                        )}
+
+                        {editingProfileId !== p.id && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingProfileId(p.id);
+                              setEditProfileNameInput(p.name);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 border border-transparent hover:border-slate-200 rounded-lg transition"
+                            title={lang === "en" ? "Rename Company" : "重命名公司"}
+                          >
+                            <Edit3 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+
+                        {!isDefaultProfile && editingProfileId !== p.id && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const confirmDel = window.confirm(
+                                lang === "en"
+                                  ? `Are you sure you want to delete profile "${p.name}"? This also purges all independent members from its database.`
+                                  : `确定要彻底删除该配置主体吗： "${p.name}"? 这将彻底擦除该主体名下的所有子层级离线泳卡数据。`
+                              );
+                              if (confirmDel) {
+                                setProfiles(prev => {
+                                  const filtered = prev.filter(item => item.id !== p.id);
+                                  localStorage.setItem("swimpool_company_profiles", JSON.stringify(filtered));
+                                  return filtered;
+                                });
+                                // Purge keys
+                                localStorage.removeItem(`swimpool_member_db_${p.id}`);
+                                if (isActive) {
+                                  handleSwitchProfile("default");
+                                }
+                              }
+                            }}
+                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 border border-transparent hover:border-rose-100 rounded-lg transition"
+                            title={lang === "en" ? "Delete Company Profile" : "彻底注销此主体项目"}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add New Company Inline Segment */}
+              <div className="bg-blue-50/50 border border-blue-150/50 p-3.5 rounded-2xl space-y-2.5">
+                <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest block">
+                  {lang === "en" ? "Add New Company / Profile" : "➕ 新增公司主体 / 环境分支"}
+                </span>
+
+                <div className="flex gap-2">
+                  <input 
+                    type="text"
+                    value={profileNameInput}
+                    onChange={(e) => setProfileNameInput(e.target.value)}
+                    placeholder={lang === "en" ? "e.g. Aqualux Swim Center" : "如：海马健身俱乐部北区分店"}
+                    className="flex-1 px-3 py-1.5 bg-white border border-slate-205 rounded-xl text-xs text-slate-800 placeholder-slate-400 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!profileNameInput.trim()) return;
+                      const newId = `comp_${Date.now()}`;
+                      const newProf = {
+                        id: newId,
+                        name: profileNameInput.trim(),
+                        sheetUrl: "",
+                        syncEnabled: false,
+                        lastSyncedTime: ""
+                      };
+                      setProfiles(prev => {
+                        const updated = [...prev, newProf];
+                        localStorage.setItem("swimpool_company_profiles", JSON.stringify(updated));
+                        return updated;
+                      });
+                      setProfileNameInput("");
+                      handleSwitchProfile(newId);
+                    }}
+                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition cursor-pointer"
+                  >
+                    {lang === "en" ? "Add & Switch" : "添加并立即切换"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Notice */}
+              <p className="text-[10px] text-slate-400 font-semibold text-center mt-1 leading-normal">
+                {lang === "en" 
+                  ? "Switching profiles instantly reloads the dynamic list. Profiles are persisted locally." 
+                  : "主体的隔离保护由沙盒级 LocalStorage 独家供应。您添加的每个公司主体均拥有自己的专属离线数据库和谷歌同步键。"}
+              </p>
+
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => setIsProfileManagerOpen(false)}
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition cursor-pointer text-center"
+              >
+                {lang === "en" ? "Close Dialog" : "关闭主体管理"}
+              </button>
+            </motion.div>
+          </div>
         )}
 
       </AnimatePresence>

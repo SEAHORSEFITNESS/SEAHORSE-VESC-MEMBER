@@ -33,11 +33,7 @@ export interface MembershipPlanPreset {
 }
 
 export const PLAN_PRESETS: MembershipPlanPreset[] = [
-  { nameKey: "presetOnce", durationDays: 1, defaultPrice: 50 },
-  { nameKey: "presetWeek", durationDays: 7, defaultPrice: 200 },
   { nameKey: "presetMonth", durationDays: 30, defaultPrice: 600 },
-  { nameKey: "presetSeason", durationDays: 90, defaultPrice: 1500 },
   { nameKey: "presetHalfYear", durationDays: 183, defaultPrice: 2600 },
   { nameKey: "presetYear", durationDays: 365, defaultPrice: 4500 },
-  { nameKey: "presetFamilyYear", durationDays: 365, defaultPrice: 6800 }, // Added an awesome Family Plan tier
 ];

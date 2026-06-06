@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Member, PLAN_PRESETS, SubMember } from "../types";
-import { TRANSLATIONS } from "../translations";
+import { TRANSLATIONS, getNormalizedPlanName, formatPhoneNumber } from "../translations";
 import { 
   X, 
   HelpCircle, 
@@ -68,7 +68,7 @@ export default function MemberForm({ member, existingIds, onSave, onClose, lang 
       setName(member.name);
       setPhone(member.phone);
       setPrice(member.price);
-      setPlan(member.plan);
+      setPlan(getNormalizedPlanName(member.plan, lang));
       setStartDate(member.startDate);
       setEndDate(member.endDate);
       setExtraInfo(member.extraInfo);
@@ -353,7 +353,7 @@ export default function MemberForm({ member, existingIds, onSave, onClose, lang 
                     const planLabel = t[p.nameKey] || p.nameKey;
                     return (
                       <option key={p.nameKey} value={planLabel} className="bg-white text-slate-800">
-                        {planLabel} ({p.durationDays}d • ¥{p.defaultPrice})
+                        {planLabel} ({p.durationDays}d)
                       </option>
                     );
                   })}
@@ -410,10 +410,11 @@ export default function MemberForm({ member, existingIds, onSave, onClose, lang 
                     type="tel" 
                     value={phone}
                     onChange={(e) => {
-                      setPhone(e.target.value);
+                      const formatted = formatPhoneNumber(e.target.value);
+                      setPhone(formatted);
                       if (formErrors.phone) setFormErrors({ ...formErrors, phone: "" });
                     }}
-                    placeholder="e.g. 138-0000-0000 / 347-xxx-xxxx"
+                    placeholder="e.g. (347)272-2822"
                     className={`w-full bg-white border px-3 py-2 pl-9 rounded-xl text-slate-800 placeholder-slate-450 text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
                       formErrors.phone ? "border-rose-300 bg-rose-50/10" : "border-slate-200"
                     }`}
@@ -545,8 +546,8 @@ export default function MemberForm({ member, existingIds, onSave, onClose, lang 
                   <input
                     type="tel"
                     value={subPhone}
-                    onChange={(e) => setSubPhone(e.target.value)}
-                    placeholder="917-xxx-xxxx"
+                    onChange={(e) => setSubPhone(formatPhoneNumber(e.target.value))}
+                    placeholder="(917)xxx-xxxx"
                     className="w-full bg-white border border-indigo-150 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-800"
                   />
                 </div>

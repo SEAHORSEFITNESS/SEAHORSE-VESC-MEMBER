@@ -84,12 +84,6 @@ export default function AdminLogin({ onLoginSuccess, onLifeguardScan, lang = "en
           <p className="text-xs text-slate-500 font-semibold">{t.loginSubTitle}</p>
         </div>
 
-        {/* Credentials hints */}
-        <div className="bg-blue-50/60 border border-blue-100 p-3.5 rounded-xl text-[11px] text-blue-800 leading-relaxed text-center font-semibold">
-          💡 {t.loginHint} <span className="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-blue-200/50">Seahorse</span> 
-          ，{t.loginPasswordHint} <span className="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-blue-200/50">Seahorse691121</span>
-        </div>
-
         {/* Administration Log In Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           
@@ -153,32 +147,11 @@ export default function AdminLogin({ onLoginSuccess, onLifeguardScan, lang = "en
           {/* Submit */}
           <button
             type="submit"
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition duration-200 shadow-md hover:shadow-lg cursor-pointer text-sm font-bold active:scale-[0.99]"
+            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition duration-200 shadow-md hover:shadow-lg cursor-pointer text-sm active:scale-[0.99]"
           >
             {t.unlockSystem}
           </button>
         </form>
-
-        <div className="relative flex py-1 items-center">
-          <div className="flex-grow border-t border-slate-205"></div>
-          <span className="flex-shrink mx-4 text-slate-400 text-[10px] font-mono font-bold uppercase tracking-wider">{t.noLoginChannelHeading}</span>
-          <div className="flex-grow border-t border-slate-205"></div>
-        </div>
-
-        {/* Lifeguard Scan Channel link */}
-        <div className="text-center">
-          <button
-            type="button"
-            onClick={onLifeguardScan}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-900 hover:bg-slate-850 text-white text-sm font-bold rounded-xl shadow-md hover:shadow-lg transition cursor-pointer transition-all active:scale-[0.99]"
-          >
-            <QrCode className="h-4.5 w-4.5 text-blue-400 animate-pulse" />
-            <span>{t.lifeguardNoLoginBtn}</span>
-          </button>
-          <p className="text-[10px] text-slate-450 mt-2.5 leading-relaxed font-semibold">
-            {t.lifeguardNoLoginHint}
-          </p>
-        </div>
 
       </motion.div>
 
