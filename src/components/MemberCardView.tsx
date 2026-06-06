@@ -32,10 +32,13 @@ interface MemberCardViewProps {
 export default function MemberCardView({ member, onClose, onToggleAlert, lang: initialLang = "en" }: MemberCardViewProps) {
   // Use local language switcher defaulting to provided language setting
   const [lang, setLang] = useState<"en" | "zh">(initialLang);
-  const [activeCardSide, setActiveCardSide] = useState<"front" | "back">("front");
+  const [activeCardSide, setActiveCardSide] = useState<"front" | "back">(member.subMembers && member.subMembers.length > 0 ? "front" : "back");
   
   // Track selected card holder (supports Family sub-members)
   const [selectedHolderId, setSelectedHolderId] = useState<string>(member.id);
+
+  // Simplified QR layout state (by default true to immediately resolve user density complaint)
+  const [simplifyQr, setSimplifyQr] = useState<boolean>(true);
 
   const t = TRANSLATIONS[lang];
 
@@ -64,7 +67,11 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
 
   // Direct verifiable online link dynamically resolved to current deployment origin
   const currentOrigin = typeof window !== "undefined" ? (window.location.origin + window.location.pathname) : "https://seahorse-vesc-member.pages.dev/";
-  const qrValue = `${currentOrigin}?id=${encodedId}&name=${encodedName}&start=${encodedStart}&end=${encodedEnd}&phone=${encodedPhone}&plan=${encodedPlan}`;
+  
+  // Custom QR string compression: if simplified, omit phone & plan metadata to reduce visual bit density by over 50%
+  const qrValue = simplifyQr
+    ? `${currentOrigin}?id=${encodedId}&name=${encodedName}&start=${encodedStart}&end=${encodedEnd}`
+    : `${currentOrigin}?id=${encodedId}&name=${encodedName}&start=${encodedStart}&end=${encodedEnd}&phone=${encodedPhone}&plan=${encodedPlan}`;
 
   // Custom high-fidelity high-contrast monochrome printing system (2 cards: Front + Back)
   const handlePrint = () => {
@@ -362,19 +369,40 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
           )}
 
           {/* Card Side Toggle selector */}
-          <div className="flex items-center justify-center p-0.5 bg-slate-100 rounded-xl max-w-sm mx-auto border border-slate-200">
-            <button
-              onClick={() => setActiveCardSide("front")}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeCardSide === "front" ? "bg-white text-slate-900 shadow-sm border border-slate-200" : "text-slate-500 hover:text-slate-800"}`}
-            >
-              {t.btnShowFront}
-            </button>
-            <button
-              onClick={() => setActiveCardSide("back")}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeCardSide === "back" ? "bg-white text-slate-900 shadow-sm border border-slate-200" : "text-slate-500 hover:text-slate-800"}`}
-            >
-              {t.btnShowBack}
-            </button>
+          <div className="flex flex-col gap-3 max-w-sm mx-auto">
+            <div className="flex items-center justify-center p-0.5 bg-slate-100 rounded-xl border border-slate-200">
+              <button
+                onClick={() => setActiveCardSide("front")}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${activeCardSide === "front" ? "bg-white text-slate-900 shadow-sm border border-slate-200" : "text-slate-500 hover:text-slate-800"}`}
+              >
+                {t.btnShowFront}
+              </button>
+              <button
+                onClick={() => setActiveCardSide("back")}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${activeCardSide === "back" ? "bg-white text-slate-900 shadow-sm border border-slate-200" : "text-slate-500 hover:text-slate-800"}`}
+              >
+                {t.btnShowBack}
+              </button>
+            </div>
+
+            {/* QR Density simplification optimization state trigger */}
+            <div className="bg-blue-50/50 border border-blue-150/40 rounded-2xl p-3 flex items-start gap-2.5 transition">
+              <input
+                type="checkbox"
+                id="simplify-qr-toggle"
+                checked={simplifyQr}
+                onChange={(e) => setSimplifyQr(e.target.checked)}
+                className="w-4 h-4 mt-0.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer accent-blue-600 flex-shrink-0"
+              />
+              <label htmlFor="simplify-qr-toggle" className="cursor-pointer select-none text-left">
+                <span className="text-[11px] font-black text-slate-800 block">
+                  {t.qrDensityLabel}
+                </span>
+                <span className="text-[9.5px] text-slate-500 font-bold block leading-relaxed mt-0.5">
+                  {t.qrDensitySub}
+                </span>
+              </label>
+            </div>
           </div>
 
           {/* Printable Card Preview Box containing active selected card */}
@@ -462,7 +490,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
                         <QRCodeCanvas 
                           value={qrValue} 
                           size={110} 
-                          level="H" 
+                          level={simplifyQr ? "L" : "H"} 
                           includeMargin={false}
                         />
                       </div>
@@ -510,7 +538,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
               <QRCodeCanvas 
                 value={qrValue} 
                 size={220} 
-                level="H" 
+                level={simplifyQr ? "L" : "H"} 
                 includeMargin={false}
               />
             </div>

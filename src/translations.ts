@@ -145,6 +145,8 @@ export const TRANSLATIONS = {
     frontSideHead: "MEMBER VIP PASS",
     backVerifyLabel: "MEMBER VERIFICATION • SCAN PASS",
     scanVerText: "SCAN QR TO VERIFY PASS VALIDITY",
+    qrDensityLabel: "Simplified QR Code (Optimize Visual Density)",
+    qrDensitySub: "Omit auxiliary fields and reduce error-correction level for cleaner, larger-blocked, faster-scanning layout.",
 
     // Dialog Toggle
     btnShowFront: "Show Front Side",
@@ -319,6 +321,8 @@ export const TRANSLATIONS = {
     frontSideHead: "VIP 会员专属卡",
     backVerifyLabel: "海马游泳中心 • 会员资格通行认证",
     scanVerText: "微信或系统相机扫码 实时核验状态",
+    qrDensityLabel: "简化二维码结构 (降低视觉像素密度)",
+    qrDensitySub: "剔除冗余字段(手机号、卡计划)并降低纠错等级。让二维码点阵更干净、方块更大，热敏打印或小屏扫码时极易识别。",
 
     // Dialog Toggle
     btnShowFront: "显示正面卡片",
