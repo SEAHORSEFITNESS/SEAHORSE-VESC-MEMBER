@@ -62,8 +62,9 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
   const encodedPhone = encodeURIComponent(selectedMemberPhone || "无");
   const encodedPlan = encodeURIComponent(member.plan);
 
-  // Direct verifiable online link
-  const qrValue = `https://411vesc.github.io/swimpool-pass/?id=${encodedId}&name=${encodedName}&start=${encodedStart}&end=${encodedEnd}&phone=${encodedPhone}&plan=${encodedPlan}`;
+  // Direct verifiable online link dynamically resolved to current deployment origin
+  const currentOrigin = typeof window !== "undefined" ? (window.location.origin + window.location.pathname) : "https://seahorse-vesc-member.pages.dev/";
+  const qrValue = `${currentOrigin}?id=${encodedId}&name=${encodedName}&start=${encodedStart}&end=${encodedEnd}&phone=${encodedPhone}&plan=${encodedPlan}`;
 
   // Custom high-fidelity high-contrast monochrome printing system (2 cards: Front + Back)
   const handlePrint = () => {

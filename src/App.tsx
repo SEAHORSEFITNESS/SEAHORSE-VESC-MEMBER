@@ -126,6 +126,50 @@ export default function App() {
   const [selectedPassMember, setSelectedPassMember] = useState<Member | null>(null);
   const [isRemindersOpen, setIsRemindersOpen] = useState<boolean>(false);
 
+  // Scan URL query parameter state for direct cell verify
+  const [publicScanData, setPublicScanData] = useState<{
+    id: string;
+    name: string;
+    start: string;
+    end: string;
+    phone: string;
+    plan: string;
+  } | null>(null);
+
+  // Check URL query parameters on load
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get("id");
+      const name = params.get("name");
+      const start = params.get("start");
+      const end = params.get("end");
+      const phone = params.get("phone");
+      const plan = params.get("plan");
+
+      if (id && name) {
+        setPublicScanData({
+          id,
+          name,
+          start: start || "",
+          end: end || "",
+          phone: phone || "",
+          plan: plan || ""
+        });
+      }
+    } catch (e) {
+      console.warn("Parsing window search params failed", e);
+    }
+  }, []);
+
+  const getRemainingDaysForEnd = (endDateStr: string) => {
+    if (!endDateStr) return 0;
+    const todayStrRaw = new Date().toISOString().split("T")[0];
+    const todayMsRaw = new Date(todayStrRaw).getTime();
+    const endMsRaw = new Date(endDateStr).getTime();
+    return Math.ceil((endMsRaw - todayMsRaw) / (1000 * 3600 * 24));
+  };
+
   // Sync translation triggers
   const handleLangToggle = (selectedVal?: "en" | "zh") => {
     const nextLang = selectedVal ? selectedVal : (lang === "en" ? "zh" : "en");
@@ -330,6 +374,150 @@ export default function App() {
 
     return true;
   });
+
+  // Render public-facing member scan validation card with real-time status check
+  if (publicScanData) {
+    const rDays = getRemainingDaysForEnd(publicScanData.end);
+    const isPassActive = rDays >= 0;
+    
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white font-sans selection:bg-blue-600">
+        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative">
+          
+          {/* Top banner accent based on status */}
+          <div className={`h-2 ${isPassActive ? "bg-emerald-500" : "bg-rose-500"} w-full`}></div>
+          
+          <div className="p-6 md:p-8 space-y-6">
+            
+            {/* Logo Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 bg-blue-700 rounded-lg flex items-center justify-center text-white shadow-md">
+                  <Waves className="h-4.5 w-4.5 animate-pulse" />
+                </div>
+                <div>
+                  <h1 className="text-sm font-black tracking-tight text-white">
+                    {lang === "en" ? "SEAHORSE FITNESS" : "海马游泳中心"}
+                  </h1>
+                  <p className="text-[9px] text-slate-400 font-bold">
+                    {lang === "en" ? "VIP VERIFICATION GATE" : "专属通行云端核验网关"}
+                  </p>
+                </div>
+              </div>
+              
+              {/* Language Switch */}
+              <button
+                onClick={() => handleLangToggle()}
+                className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition cursor-pointer border border-slate-700"
+              >
+                <Languages className="h-3 w-3" />
+                <span>{lang === "en" ? "English" : "中文"}</span>
+              </button>
+            </div>
+
+            {/* Status Card Panel */}
+            <div className={`p-6 rounded-2xl text-center space-y-3.5 border ${
+              isPassActive 
+                ? "bg-emerald-500/10 border-emerald-500/30" 
+                : "bg-rose-500/10 border-rose-500/30"
+            }`}>
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto shadow-md ${
+                isPassActive 
+                  ? "bg-emerald-500 text-slate-950 animate-bounce" 
+                  : "bg-rose-500 text-white animate-pulse"
+              }`}>
+                {isPassActive ? (
+                  <CheckCircle2 className="h-8 w-8 text-black font-black" />
+                ) : (
+                  <AlertCircle className="h-8 w-8 text-white" />
+                )}
+              </div>
+              
+              <div>
+                <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full inline-block mb-1.5 ${
+                  isPassActive 
+                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" 
+                    : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                }`}>
+                  {isPassActive 
+                    ? (lang === "en" ? "PASS GRANTED / ACTIVE" : "审核通过 • 准予通行") 
+                    : (lang === "en" ? "EXPIRED / ACCESS BARRED" : "通行到期 • 拒绝入池")
+                  }
+                </span>
+                
+                <h2 className="text-xl font-extrabold tracking-tight text-white">
+                  {isPassActive 
+                    ? (lang === "en" ? "VALID MEMBER PASS" : "有效泳客资格卡") 
+                    : (lang === "en" ? "MEMBERSHIP EXPIRED" : "会员通行证已到期")
+                  }
+                </h2>
+                
+                <p className={`text-xs font-mono font-bold mt-2 ${
+                  isPassActive ? "text-emerald-400" : "text-rose-400"
+                }`}>
+                  {isPassActive 
+                    ? (lang === "en" ? `Access approved — ${rDays} days remaining` : `绿牌通行期内 — 剩余 ${rDays} 天期限`) 
+                    : (lang === "en" ? `Access barred — expired ${Math.abs(rDays)} days ago` : `拒绝出入池 — 已于 ${Math.abs(rDays)} 天前过期`)
+                  }
+                </p>
+              </div>
+            </div>
+
+            {/* Decoded Member Details Table */}
+            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4.5 space-y-3.5 text-xs">
+              <h3 className="font-extrabold text-slate-400 text-[10px] uppercase tracking-wider border-b border-slate-800 pb-2">
+                {lang === "en" ? "Swimmer Voucher Profile" : "泳卡凭证详情"}
+              </h3>
+              
+              <div className="grid grid-cols-2 gap-y-3.5 gap-x-2">
+                <div>
+                  <span className="text-slate-500 block text-[9px] uppercase font-bold">{lang === "en" ? "Name" : "会员姓名"}</span>
+                  <span className="font-extrabold text-slate-100 text-sm">{publicScanData.name}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[9px] uppercase font-bold">{lang === "en" ? "Card ID" : "通行卡号 No."}</span>
+                  <span className="font-mono font-black text-blue-400 text-sm">{publicScanData.id}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[9px] uppercase font-bold">{lang === "en" ? "Plan Tier" : "开卡卡型计划"}</span>
+                  <span className="font-bold text-slate-200">{publicScanData.plan || (lang === "en" ? "Standard Pass" : "专属卡型")}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[9px] uppercase font-bold">{lang === "en" ? "Phone" : "预留手机号"}</span>
+                  <span className="font-mono text-slate-300 font-bold">{publicScanData.phone || "N/A"}</span>
+                </div>
+                <div className="col-span-2 border-t border-slate-800/65 pt-3.5 flex justify-between font-mono text-[10.5px] text-slate-400 font-bold">
+                  <span>{lang === "en" ? "START: " : "生效日: "}{publicScanData.start}</span>
+                  <span className={isPassActive ? "text-slate-400" : "text-rose-450 text-rose-400 font-extrabold"}>{lang === "en" ? "EXPIRY: " : "结束日: "}{publicScanData.end}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Prompt Notice */}
+            <p className="text-[10px] text-slate-500 leading-relaxed font-semibold text-center uppercase tracking-wide">
+              {lang === "en" 
+                ? "This is an authentic cloud-verified Seahorse Fitness digital pass check." 
+                : "本验证由海马游泳中心数据库动态匹配，仅作安全通行防溺及合规校验使用"}
+            </p>
+
+            {/* Action buttons */}
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                onClick={() => {
+                  setPublicScanData(null);
+                  window.history.replaceState({}, document.title, window.location.pathname);
+                }}
+                className="w-full py-3 bg-slate-800 hover:bg-slate-700 border border-slate-705 text-slate-300 font-bold rounded-xl transition cursor-pointer text-xs uppercase"
+              >
+                {lang === "en" ? "Administrative Portal Entrance" : "管理员/救生员登录通道"}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Lockscreen boundary
   if (!isLoggedIn) {
