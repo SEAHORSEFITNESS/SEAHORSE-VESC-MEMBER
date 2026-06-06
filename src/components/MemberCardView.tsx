@@ -75,6 +75,32 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
 
   // Custom high-fidelity high-contrast monochrome printing system (2 cards: Front + Back)
   const handlePrint = () => {
+    let qrDataUrl = "";
+    const parentCanvas = document.querySelector("#swim-member-card-hidden-back canvas") as HTMLCanvasElement;
+    if (parentCanvas) {
+      try {
+        qrDataUrl = parentCanvas.toDataURL("image/png");
+      } catch (e) {
+        console.error("Error drawing parentCanvas", e);
+      }
+    }
+    
+    // Fallbacks if parentCanvas is empty or didn't mount in time
+    if (!qrDataUrl) {
+      const canvases = document.querySelectorAll("canvas");
+      for (const canvas of Array.from(canvases)) {
+        try {
+          const url = canvas.toDataURL("image/png");
+          if (url && url.length > 1000) {
+            qrDataUrl = url;
+            break;
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+
     const printWindow = window.open("", "_blank");
     if (printWindow) {
       const companyHeader = `
@@ -194,29 +220,29 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
                 <!-- Company Header -->
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #000000; padding-bottom: 4px; box-sizing: border-box; width: 100%;">
                   <div style="flex: 1; min-width: 0; padding-right: 4px; box-sizing: border-box; text-align: left;">
-                    ${companyHeader}
+                    \${companyHeader}
                   </div>
                   <div style="flex-shrink: 0; text-align: right;">
-                    ${badgeHTML}
+                    \${badgeHTML}
                   </div>
                 </div>
 
                 <!-- Fields -->
                 <div style="margin-top: 5px; display: flex; flex-direction: column; justify-content: center; flex-grow: 1; padding: 2px 0; box-sizing: border-box;">
                   <div style="margin-bottom: 2px;">
-                    <span style="font-size: 10px; font-weight: 900; color: #000000; text-transform: uppercase; letter-spacing: 0.2px; font-family: system-ui, -apple-system, sans-serif;">${nameLabel}:</span>
+                    <span style="font-size: 10px; font-weight: 900; color: #000000; text-transform: uppercase; letter-spacing: 0.2px; font-family: system-ui, -apple-system, sans-serif;">\${nameLabel}:</span>
                     <div style="font-size: 26px; font-weight: 950; font-family: system-ui, -apple-system, sans-serif; text-transform: uppercase; border-bottom: 2px solid #000000; padding-bottom: 1px; color: #000000; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px;">
-                      ${selectedMemberName}
+                      \${selectedMemberName}
                     </div>
                   </div>
                   <div style="display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; width: 100%;">
                     <div style="text-align: left;">
-                      <span class="print-info-label">${phoneLabel}:</span>
-                      <div class="print-info-val" style="font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-size: 9.5px; font-weight: 850; color: #000000;">${selectedMemberPhone}</div>
+                      <span class="print-info-label">\${phoneLabel}:</span>
+                      <div class="print-info-val" style="font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-size: 9.5px; font-weight: 850; color: #000000;">\${selectedMemberPhone}</div>
                     </div>
                     <div style="text-align: right;">
-                      <span class="print-info-label">${cardIdLabel}:</span>
-                      <div class="print-info-val" style="font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-size: 9.5px; font-weight: 900; background: #ffffff; padding: 1.5px 4.5px; border-radius: 2px; color: #000000; border: 1.5px solid #000000; display: inline-block;">${selectedMemberId}</div>
+                      <span class="print-info-label">\${cardIdLabel}:</span>
+                      <div class="print-info-val" style="font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-size: 9.5px; font-weight: 900; background: #ffffff; padding: 1.5px 4.5px; border-radius: 2px; color: #000000; border: 1.5px solid #000000; display: inline-block;">\${selectedMemberId}</div>
                     </div>
                   </div>
                 </div>
@@ -224,9 +250,9 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
                 <!-- Footer Exp times -->
                 <div class="print-info-row" style="display: flex; justify-content: flex-start; align-items: flex-end; box-sizing: border-box; width: 100%;">
                   <div style="text-align: left;">
-                    <span class="print-info-label">${dateLabel}:</span>
+                    <span class="print-info-label">\${dateLabel}:</span>
                     <div style="font-size: 10.5px; font-weight: 900; font-family: monospace, SFMono-Regular, Consolas, sans-serif; color: #000000; margin-top: 1.5px;">
-                      ${member.startDate} <span style="font-weight: 800;">~</span> ${member.endDate}
+                      \${member.startDate} <span style="font-weight: 800;">~</span> \${member.endDate}
                     </div>
                   </div>
                 </div>
@@ -240,7 +266,9 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
                   
                   <!-- Left side of back: Maximize QR code occupying the entire left section -->
                   <div style="flex: 0 0 1.25in; display: flex; align-items: center; justify-content: center; height: 1.25in; width: 1.25in; border: 2px solid #000000; padding: 2px; border-radius: 5px; box-sizing: border-box; overflow: hidden; background: #ffffff;">
-                    <div id="qr-target-print-back" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;"></div>
+                    <div id="qr-target-print-back" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
+                      \${qrDataUrl ? \`<img src="\${qrDataUrl}" style="width: 1.2in; height: 1.2in; display: block;" />\` : ""}
+                    </div>
                   </div>
 
                   <!-- Right side of back: text information, identifier & guidelines -->
@@ -259,37 +287,21 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
                         CARD HOLDER
                       </div>
                       <div style="font-size: 11px; font-weight: 950; margin-top: 1px; text-transform: uppercase; font-family: system-ui, sans-serif; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #000000;">
-                        ${selectedMemberName}
+                        \${selectedMemberName}
                       </div>
                       <div style="font-size: 7.5px; font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-weight: 900; background: #ffffff; color: #000000 !important; display: inline-block; padding: 1.5px 4.5px; margin-top: 2.5px; border-radius: 2px; width: fit-content; border: 1.5px solid #000000;">
-                        ID: ${selectedMemberId}
+                        ID: \${selectedMemberId}
                       </div>
                     </div>
 
                     <div style="font-size: 5.5px; font-weight: 900; line-height: 1.25; padding-top: 3px; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; color: #000000;">
-                      ${backFooter}
+                      \${backFooter}
                     </div>
                   </div>
 
                 </div>
               </div>
             </div>
-
-            <script>
-              try {
-                const parentQr = window.opener.document.querySelector("#swim-member-card-hidden-back canvas");
-                if (parentQr) {
-                  const img = document.createElement("img");
-                  img.src = parentQr.toDataURL("image/png");
-                  img.style.width = "1.2in";
-                  img.style.height = "1.2in";
-                  img.style.display = "block";
-                  document.getElementById("qr-target-print-back").appendChild(img);
-                }
-              } catch(e) {
-                console.error("Cloning parent Canvas QR code state failed", e);
-              }
-            </script>
           </body>
         </html>
       `);
@@ -534,7 +546,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
             </div>
 
             {/* Invisible QR specifically dedicated for print clone tracking */}
-            <div id="swim-member-card-hidden-back" className="hidden">
+            <div id="swim-member-card-hidden-back" className="fixed -top-[9999px] -left-[9999px] opacity-0 pointer-events-none">
               <QRCodeCanvas 
                 value={qrValue} 
                 size={220} 
