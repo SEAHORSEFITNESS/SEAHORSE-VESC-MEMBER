@@ -73,56 +73,175 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
     ? `${currentOrigin}?id=${encodedId}&name=${encodedName}&start=${encodedStart}&end=${encodedEnd}`
     : `${currentOrigin}?id=${encodedId}&name=${encodedName}&start=${encodedStart}&end=${encodedEnd}&phone=${encodedPhone}&plan=${encodedPlan}`;
 
-  // Custom high-fidelity high-contrast monochrome printing system (2 cards: Front + Back)
+  // Custom high-fidelity high-contrast monochrome printing system (multiple cards: Front + Back on one page)
   const handlePrint = () => {
-    let qrDataUrl = "";
-    const parentCanvas = document.querySelector("#swim-member-card-hidden-back canvas") as HTMLCanvasElement;
-    if (parentCanvas) {
-      try {
-        qrDataUrl = parentCanvas.toDataURL("image/png");
-      } catch (e) {
-        console.error("Error drawing parentCanvas", e);
-      }
-    }
-    
-    // Fallbacks if parentCanvas is empty or didn't mount in time
-    if (!qrDataUrl) {
-      const canvases = document.querySelectorAll("canvas");
-      for (const canvas of Array.from(canvases)) {
-        try {
-          const url = canvas.toDataURL("image/png");
-          if (url && url.length > 1000) {
-            qrDataUrl = url;
-            break;
-          }
-        } catch (e) {
-          // ignore
-        }
-      }
-    }
+    // Collect all cards to print: main member + all sub-members
+    const itemsToPrint = [
+      {
+        id: member.id,
+        name: member.name,
+        phone: member.phone || "None",
+        isPrincipal: true,
+        qrElementId: "swim-qr-print-main"
+      },
+      ...(member.subMembers || []).map(sub => ({
+        id: sub.id,
+        name: sub.name,
+        phone: sub.phone || member.phone || "None",
+        isPrincipal: false,
+        qrElementId: `swim-qr-print-${sub.id}`
+      }))
+    ];
 
     const printWindow = window.open("", "_blank");
     if (printWindow) {
-      const companyHeader = `
-        <div style="font-size: 9.5px; font-weight: 900; letter-spacing: 0.1px; color: #000000; line-height: 1.15; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; text-transform: uppercase;">SEAHORSE FITNESS INC</div>
-        <div style="font-size: 6px; font-weight: 700; color: #111111; line-height: 1.15; margin-top: 1.5px; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;">
-          69 Columbia St, NY 10002 • Cell: 347-272-2822
-        </div>
-      `;
+      try {
+        // Force UTF-8 encoding configuration on local document stream
+        (printWindow.document as any).charset = "UTF-8";
+      } catch (e) {
+        console.error("Charset write warning", e);
+      }
 
-      const nameLabel = "GUEST NAME";
-      const phoneLabel = "TELEPHONE";
-      const cardIdLabel = "CARD NUMBER";
-      const dateLabel = "SWIM PASS VALIDITY PERIOD";
+      const cardsHTML = itemsToPrint.map(item => {
+        let qrDataUrl = "";
+        const canvas = document.getElementById(item.qrElementId) as HTMLCanvasElement;
+        if (canvas) {
+          try {
+            qrDataUrl = canvas.toDataURL("image/png");
+          } catch (e) {
+            console.error("Error drawing canvas for print", e);
+          }
+        }
 
-      const backFooter = "SCAN QR CODE TO VERIFY PASS ELIGIBILITY";
+        // Final fallback to any valid canvas if specific one is empty
+        if (!qrDataUrl) {
+          const fallbackCanvas = document.querySelector("#swim-member-card-hidden-back canvas") as HTMLCanvasElement;
+          if (fallbackCanvas) {
+            try {
+              qrDataUrl = fallbackCanvas.toDataURL("image/png");
+            } catch (fallbackErr) {
+              // ignore
+            }
+          }
+        }
 
-      // High-contrast, background-independent badges with solid/dashed borders for maximum thermal/B&W printing compatibility
-      const badgeHTML = isPrincipalSelected ? "" : `
-        <div style="font-size: 7px; font-weight: 900; border: 1.5px solid #000000; padding: 2.5px 5.5px; border-radius: 3px; background: #ffffff; color: #000000 !important; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; text-transform: uppercase; letter-spacing: 0.2px;">
-          FAMILY PASS
-        </div>
-      `;
+        const companyHeader = `<div style="font-size: 9.5px; font-weight: 900; letter-spacing: 0.1px; color: #000000; line-height: 1.15; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; text-transform: uppercase;">SEAHORSE FITNESS INC</div>
+             <div style="font-size: 6px; font-weight: 700; color: #111111; line-height: 1.15; margin-top: 1.5px; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;">
+               69 Columbia St, NY 10002 • Cell: 347-272-2822
+             </div>`;
+
+        const nameLabel = "GUEST NAME";
+        const phoneLabel = "TELEPHONE";
+        const cardIdLabel = "CARD NUMBER";
+        const dateLabel = "SWIM PASS VALIDITY PERIOD";
+        const backFooter = "SCAN QR CODE TO VERIFY PASS ELIGIBILITY";
+
+        // High-contrast physical badge for child/sub members in package - always in English to prevent printer driver failures
+        const badgeHTML = item.isPrincipal ? "" : `
+          <div style="font-size: 7px; font-weight: 900; border: 1.5px solid #000000; padding: 2px 4px; border-radius: 3px; background: #ffffff; color: #000000 !important; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; text-transform: uppercase; letter-spacing: 0.2px; text-align: center; white-space: nowrap;">
+            FAMILY PASS
+          </div>
+        `;
+
+        return `
+          <!-- --- CARD GROUP FOR ${item.name} --- -->
+          <div class="card-group" style="page-break-inside: avoid; display: flex; flex-direction: column; gap: 15px; align-items: center; justify-content: center; margin-bottom: 25px;">
+            
+            <!-- 1. FRONT CARD SECTION -->
+            <div class="print-card-outer">
+              <div class="print-card-container">
+                <!-- Company Header -->
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #000000; padding-bottom: 4px; box-sizing: border-box; width: 100%;">
+                  <div style="flex: 1; min-width: 0; padding-right: 4px; box-sizing: border-box; text-align: left;">
+                    ${companyHeader}
+                  </div>
+                  <div style="flex-shrink: 0; text-align: right;">
+                    ${badgeHTML}
+                  </div>
+                </div>
+
+                <!-- Fields -->
+                <div style="margin-top: 5px; display: flex; flex-direction: column; justify-content: center; flex-grow: 1; padding: 2px 0; box-sizing: border-box;">
+                  <div style="margin-bottom: 2px;">
+                    <span style="font-size: 10px; font-weight: 900; color: #000000; text-transform: uppercase; letter-spacing: 0.2px; font-family: system-ui, -apple-system, sans-serif;">${nameLabel}:</span>
+                    <div style="font-size: 24px; font-weight: 950; font-family: system-ui, -apple-system, sans-serif; text-transform: uppercase; border-bottom: 2px solid #000000; padding-bottom: 1px; color: #000000; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px;">
+                      ${item.name}
+                    </div>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; width: 100%;">
+                    <div style="text-align: left;">
+                      <span class="print-info-label">${phoneLabel}:</span>
+                      <div class="print-info-val" style="font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-size: 9.5px; font-weight: 850; color: #000000;">${item.phone}</div>
+                    </div>
+                    <div style="text-align: right;">
+                      <span class="print-info-label">${cardIdLabel}:</span>
+                      <div class="print-info-val" style="font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-size: 9.5px; font-weight: 900; background: #ffffff; padding: 1.5px 4.5px; border-radius: 2px; color: #000000; border: 1.5px solid #000000; display: inline-block;">${item.id}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Footer Exp times -->
+                <div class="print-info-row" style="display: flex; justify-content: flex-start; align-items: flex-end; box-sizing: border-box; width: 100%;">
+                  <div style="text-align: left;">
+                    <span class="print-info-label">${dateLabel}:</span>
+                    <div style="font-size: 10.5px; font-weight: 900; font-family: monospace, SFMono-Regular, Consolas, sans-serif; color: #000000; margin-top: 1.5px;">
+                      ${member.startDate} <span style="font-weight: 800;">~</span> ${member.endDate}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. BACK CARD SECTION IN LEFT-RIGHT SPLIT -->
+            <div class="print-card-outer">
+              <div class="print-card-container">
+                <div style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; height: 100%; width: 100%; box-sizing: border-box; gap: 8px;">
+                  
+                  <!-- Left side of back: Maximize QR code occupying the entire left section -->
+                  <div style="flex: 0 0 1.25in; display: flex; align-items: center; justify-content: center; height: 1.25in; width: 1.25in; border: 2px solid #000000; padding: 2px; border-radius: 5px; box-sizing: border-box; overflow: hidden; background: #ffffff;">
+                    <div class="qr-target-print-back" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
+                      ${qrDataUrl ? `<img src="${qrDataUrl}" style="width: 1.2in; height: 1.2in; display: block;" />` : `<div style="font-size: 8px; color: #000; font-weight: bold;">Loading-QR</div>`}
+                    </div>
+                  </div>
+
+                  <!-- Right side of back: text information, identifier & guidelines -->
+                  <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; height: 100%; box-sizing: border-box; text-align: left; padding: 2px 0; min-width: 0;">
+                    <div>
+                      <div style="font-size: 8px; font-weight: 900; line-height: 1.1; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; color: #000000; text-transform: uppercase; letter-spacing: 0.1px;">
+                        SEAHORSE FITNESS INC
+                      </div>
+                      <div style="font-size: 5.5px; color: #111111; line-height: 1.15; margin-top: 1.5px; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;">
+                        69 Columbia St, NY 10002 • 347-272-2822
+                      </div>
+                    </div>
+
+                    <div style="margin: 3px 0; padding-top: 3.5px; flex-grow: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0;">
+                      <div style="font-size: 6px; text-transform: uppercase; font-weight: 800; color: #111111; letter-spacing: 0.1px; font-family: system-ui, sans-serif;">
+                        CARD HOLDER
+                      </div>
+                      <div style="font-size: 11px; font-weight: 950; margin-top: 1px; text-transform: uppercase; font-family: system-ui, sans-serif; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #000000;">
+                        ${item.name}
+                      </div>
+                      <div style="font-size: 7.5px; font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-weight: 900; background: #ffffff; color: #000000 !important; display: inline-block; padding: 1.5px 4.5px; margin-top: 2.5px; border-radius: 2px; width: fit-content; border: 1.5px solid #000000;">
+                        ID: ${item.id}
+                      </div>
+                    </div>
+
+                    <div style="font-size: 5.5px; font-weight: 900; line-height: 1.25; padding-top: 3px; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; color: #000000;">
+                      ${backFooter}
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+
+          </div>
+        `;
+      }).join(`
+        <!-- Decorative scissor lines cutting gap in printed media -->
+        <div style="width: 100%; border-top: 1.5px dashed #cccccc; margin: 25px 0; page-break-inside: avoid;"></div>
+      `);
 
       printWindow.document.write(`
         <!DOCTYPE html>
@@ -130,23 +249,20 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
           <head>
             <meta charset="UTF-8">
             <meta name="google" content="notranslate">
-            <title>Print Pass - ${selectedMemberName}</title>
+            <title>Print Passes - ${member.name}</title>
             <style>
               body { 
                 margin: 0; 
-                padding: 40px 20px; 
+                padding: 30px; 
                 display: flex; 
                 flex-direction: column;
-                justify-content: center; 
+                justify-content: flex-start; 
                 align-items: center; 
-                gap: 50px;
                 background-color: #ffffff;
-                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 -webkit-font-smoothing: antialiased;
-                -moz-osx-font-smoothing: grayscale;
               }
               
-              /* Exact 3in x 2in standard printed card wrapper with only a clean dashed boundary line for scissors folding/cutting */
               .print-card-outer {
                 width: 3.1in;
                 height: 2.1in;
@@ -158,6 +274,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
                 box-sizing: border-box;
                 padding: 0.05in;
                 page-break-inside: avoid;
+                background-color: #ffffff;
               }
 
               .print-card-container {
@@ -190,7 +307,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
                 color: #000000;
                 text-transform: uppercase;
                 letter-spacing: 0.2px;
-                font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+                font-family: system-ui, -apple-system, sans-serif;
               }
 
               .print-info-val {
@@ -202,106 +319,18 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
 
               @media print {
                 body {
-                  padding: 0;
+                  padding: 15px 0;
                   background-color: #ffffff;
                 }
                 @page {
                   size: auto;
-                  margin: 0.5in;
+                  margin: 0.3in;
                 }
               }
             </style>
           </head>
-          <body onload="setTimeout(function(){ window.print(); window.close(); }, 350);">
-            
-            <!-- 1. FRONT CARD SECTION -->
-            <div class="print-card-outer">
-               <div class="print-card-container">
-                <!-- Company Header -->
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #000000; padding-bottom: 4px; box-sizing: border-box; width: 100%;">
-                  <div style="flex: 1; min-width: 0; padding-right: 4px; box-sizing: border-box; text-align: left;">
-                    \${companyHeader}
-                  </div>
-                  <div style="flex-shrink: 0; text-align: right;">
-                    \${badgeHTML}
-                  </div>
-                </div>
-
-                <!-- Fields -->
-                <div style="margin-top: 5px; display: flex; flex-direction: column; justify-content: center; flex-grow: 1; padding: 2px 0; box-sizing: border-box;">
-                  <div style="margin-bottom: 2px;">
-                    <span style="font-size: 10px; font-weight: 900; color: #000000; text-transform: uppercase; letter-spacing: 0.2px; font-family: system-ui, -apple-system, sans-serif;">\${nameLabel}:</span>
-                    <div style="font-size: 26px; font-weight: 950; font-family: system-ui, -apple-system, sans-serif; text-transform: uppercase; border-bottom: 2px solid #000000; padding-bottom: 1px; color: #000000; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px;">
-                      \${selectedMemberName}
-                    </div>
-                  </div>
-                  <div style="display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; width: 100%;">
-                    <div style="text-align: left;">
-                      <span class="print-info-label">\${phoneLabel}:</span>
-                      <div class="print-info-val" style="font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-size: 9.5px; font-weight: 850; color: #000000;">\${selectedMemberPhone}</div>
-                    </div>
-                    <div style="text-align: right;">
-                      <span class="print-info-label">\${cardIdLabel}:</span>
-                      <div class="print-info-val" style="font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-size: 9.5px; font-weight: 900; background: #ffffff; padding: 1.5px 4.5px; border-radius: 2px; color: #000000; border: 1.5px solid #000000; display: inline-block;">\${selectedMemberId}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Footer Exp times -->
-                <div class="print-info-row" style="display: flex; justify-content: flex-start; align-items: flex-end; box-sizing: border-box; width: 100%;">
-                  <div style="text-align: left;">
-                    <span class="print-info-label">\${dateLabel}:</span>
-                    <div style="font-size: 10.5px; font-weight: 900; font-family: monospace, SFMono-Regular, Consolas, sans-serif; color: #000000; margin-top: 1.5px;">
-                      \${member.startDate} <span style="font-weight: 800;">~</span> \${member.endDate}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
- 
-            <!-- 2. BACK CARD SECTION IN REVOLUTIONARY LEFT-RIGHT SPLIT -->
-            <div class="print-card-outer" style="margin-top: 40px;">
-              <div class="print-card-container">
-                <div style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; height: 100%; width: 100%; box-sizing: border-box; gap: 8px;">
-                  
-                  <!-- Left side of back: Maximize QR code occupying the entire left section -->
-                  <div style="flex: 0 0 1.25in; display: flex; align-items: center; justify-content: center; height: 1.25in; width: 1.25in; border: 2px solid #000000; padding: 2px; border-radius: 5px; box-sizing: border-box; overflow: hidden; background: #ffffff;">
-                    <div id="qr-target-print-back" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
-                      \${qrDataUrl ? \`<img src="\${qrDataUrl}" style="width: 1.2in; height: 1.2in; display: block;" />\` : ""}
-                    </div>
-                  </div>
-
-                  <!-- Right side of back: text information, identifier & guidelines -->
-                  <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; height: 100%; box-sizing: border-box; text-align: left; padding: 2px 0; min-width: 0;">
-                    <div>
-                      <div style="font-size: 8px; font-weight: 900; line-height: 1.1; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; color: #000000; text-transform: uppercase; letter-spacing: 0.1px;">
-                        SEAHORSE FITNESS INC
-                      </div>
-                      <div style="font-size: 5.5px; color: #111111; line-height: 1.15; margin-top: 1.5px; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;">
-                        69 Columbia St, NY 10002 • 347-272-2822
-                      </div>
-                    </div>
-
-                    <div style="margin: 3px 0; padding-top: 3.5px; flex-grow: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0;">
-                      <div style="font-size: 6px; text-transform: uppercase; font-weight: 800; color: #111111; letter-spacing: 0.1px; font-family: system-ui, sans-serif;">
-                        CARD HOLDER
-                      </div>
-                      <div style="font-size: 11px; font-weight: 950; margin-top: 1px; text-transform: uppercase; font-family: system-ui, sans-serif; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #000000;">
-                        \${selectedMemberName}
-                      </div>
-                      <div style="font-size: 7.5px; font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-weight: 900; background: #ffffff; color: #000000 !important; display: inline-block; padding: 1.5px 4.5px; margin-top: 2.5px; border-radius: 2px; width: fit-content; border: 1.5px solid #000000;">
-                        ID: \${selectedMemberId}
-                      </div>
-                    </div>
-
-                    <div style="font-size: 5.5px; font-weight: 900; line-height: 1.25; padding-top: 3px; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; color: #000000;">
-                      \${backFooter}
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-            </div>
+          <body onload="setTimeout(function(){ window.print(); window.close(); }, 400);">
+            ${cardsHTML}
           </body>
         </html>
       `);
@@ -547,12 +576,35 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
 
             {/* Invisible QR specifically dedicated for print clone tracking */}
             <div id="swim-member-card-hidden-back" className="fixed -top-[9999px] -left-[9999px] opacity-0 pointer-events-none">
+              {/* Main Member Canvas */}
               <QRCodeCanvas 
-                value={qrValue} 
+                id="swim-qr-print-main"
+                value={
+                  simplifyQr
+                    ? `${currentOrigin}?id=${encodeURIComponent(member.id)}&name=${encodeURIComponent(member.name)}&start=${encodeURIComponent(member.startDate)}&end=${encodeURIComponent(member.endDate)}`
+                    : `${currentOrigin}?id=${encodeURIComponent(member.id)}&name=${encodeURIComponent(member.name)}&start=${encodeURIComponent(member.startDate)}&end=${encodeURIComponent(member.endDate)}&phone=${encodeURIComponent(member.phone || "None")}&plan=${encodeURIComponent(getNormalizedPlanName(member.plan, "en"))}`
+                }
                 size={220} 
                 level={simplifyQr ? "L" : "H"} 
                 includeMargin={false}
               />
+              {/* Sub Members Canvases */}
+              {member.subMembers?.map((sub) => {
+                const subPhone = sub.phone || member.phone || "None";
+                const subQrValue = simplifyQr
+                  ? `${currentOrigin}?id=${encodeURIComponent(sub.id)}&name=${encodeURIComponent(sub.name)}&start=${encodeURIComponent(member.startDate)}&end=${encodeURIComponent(member.endDate)}`
+                  : `${currentOrigin}?id=${encodeURIComponent(sub.id)}&name=${encodeURIComponent(sub.name)}&start=${encodeURIComponent(member.startDate)}&end=${encodeURIComponent(member.endDate)}&phone=${encodeURIComponent(subPhone)}&plan=${encodeURIComponent(getNormalizedPlanName(member.plan, "en"))}`;
+                return (
+                  <QRCodeCanvas 
+                    key={sub.id}
+                    id={`swim-qr-print-${sub.id}`}
+                    value={subQrValue} 
+                    size={220} 
+                    level={simplifyQr ? "L" : "H"} 
+                    includeMargin={false}
+                  />
+                );
+              })}
             </div>
 
           </div>
