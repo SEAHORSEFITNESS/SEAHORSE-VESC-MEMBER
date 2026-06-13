@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from "react";
-import { QRCodeCanvas } from "qrcode.react";
+import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { 
   X, 
   Printer, 
@@ -170,7 +170,11 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
       setTimeout(() => setDownloadSuccess(false), 4000);
     } catch (err) {
       console.error("Download error:", err);
-      alert(lang === "zh" ? "生成下载文件失败，请重试！" : "Failed to compile download files, please try again.");
+      const errMsg = err instanceof Error ? err.message : String(err);
+      alert(lang === "zh" 
+        ? `生成下载文件失败，请重新加载页面或重试！\n错误详情: ${errMsg}` 
+        : `Failed to compile download files, please refresh or try again.\nError details: ${errMsg}`
+      );
     } finally {
       setIsDownloading(false);
       setDownloadProgress(null);
@@ -679,7 +683,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
             </div>
 
             {/* Invisible QR specifically dedicated for print clone tracking */}
-            <div id="swim-member-card-hidden-back" className="fixed -top-[9999px] -left-[9999px] opacity-0 pointer-events-none">
+            <div id="swim-member-card-hidden-back" className="overflow-hidden h-0 pointer-events-none" style={{ opacity: 1, visibility: "visible" }}>
               {/* Main Member Canvas */}
               <QRCodeCanvas 
                 id="swim-qr-print-main"
@@ -788,7 +792,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
                     >
                       <div className="flex flex-row items-center justify-between h-full w-full gap-3">
                         <div className="flex-shrink-0 flex items-center justify-center p-1.5 border-2 border-black rounded-xl bg-white shadow-sm" style={{ width: "110px", height: "110px" }}>
-                          <QRCodeCanvas 
+                          <QRCodeSVG 
                             value={holderQrValue} 
                             size={94} 
                             level={simplifyQr ? "L" : "H"} 
@@ -894,7 +898,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
                       >
                         <div className="flex flex-row items-center justify-between h-full w-full gap-3">
                           <div className="flex-shrink-0 flex items-center justify-center p-1.5 border-2 border-black rounded-xl bg-white shadow-sm" style={{ width: "110px", height: "110px" }}>
-                            <QRCodeCanvas 
+                            <QRCodeSVG 
                               value={holderQrValue} 
                               size={94} 
                               level={simplifyQr ? "L" : "H"} 
