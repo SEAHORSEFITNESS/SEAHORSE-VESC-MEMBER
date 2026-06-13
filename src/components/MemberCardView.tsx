@@ -16,11 +16,16 @@ import {
   Clock,
   Languages,
   ChevronRight,
-  UserPlus
+  UserPlus,
+  Download,
+  Loader2,
+  CheckCircle2
 } from "lucide-react";
 import { Member, SubMember } from "../types";
 import { TRANSLATIONS, getNormalizedPlanName } from "../translations";
 import { motion, AnimatePresence } from "motion/react";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 
 interface MemberCardViewProps {
   member: Member;
@@ -72,6 +77,105 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
   const qrValue = simplifyQr
     ? `${currentOrigin}?id=${encodedId}&name=${encodedName}&start=${encodedStart}&end=${encodedEnd}`
     : `${currentOrigin}?id=${encodedId}&name=${encodedName}&start=${encodedStart}&end=${encodedEnd}&phone=${encodedPhone}&plan=${encodedPlan}`;
+
+  const [downloadFormat, setDownloadFormat] = useState<"PDF" | "JPG">("JPG");
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [downloadProgress, setDownloadProgress] = useState<{current: number, total: number} | null>(null);
+  const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
+
+  const handleDownloadAll = async () => {
+    setIsDownloading(true);
+    setDownloadSuccess(false);
+
+    const holders = [
+      {
+        id: member.id,
+        name: member.name,
+        phone: member.phone || "None",
+        isPrincipal: true,
+      },
+      ...(member.subMembers || []).map(sub => ({
+        id: sub.id,
+        name: sub.name,
+        phone: sub.phone || member.phone || "None",
+        isPrincipal: false,
+      }))
+    ];
+
+    setDownloadProgress({ current: 0, total: holders.length });
+
+    try {
+      for (let i = 0; i < holders.length; i++) {
+        const holder = holders[i];
+        setDownloadProgress({ current: i + 1, total: holders.length });
+
+        // Let the DOM update and image load
+        await new Promise((resolve) => setTimeout(resolve, 250));
+
+        if (downloadFormat === "JPG") {
+          const combinedElement = document.getElementById(`download-card-combined-${holder.id}`);
+          if (combinedElement) {
+            const canvas = await html2canvas(combinedElement, {
+              scale: 3,
+              useCORS: true,
+              backgroundColor: "#ffffff",
+              logging: false,
+            });
+            const imgData = canvas.toDataURL("image/jpeg", 0.95);
+            
+            const link = document.createElement("a");
+            link.href = imgData;
+            link.download = `${holder.name}_swim_pass.jpg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }
+        } else {
+          const frontElement = document.getElementById(`download-card-front-${holder.id}`);
+          const backElement = document.getElementById(`download-card-back-${holder.id}`);
+
+          if (frontElement && backElement) {
+            const pdf = new jsPDF({
+              orientation: "landscape",
+              unit: "in",
+              format: [3.1, 2.1],
+            });
+
+            // Page 1: Front
+            const frontCanvas = await html2canvas(frontElement, {
+              scale: 3,
+              useCORS: true,
+              backgroundColor: "#ffffff",
+              logging: false,
+            });
+            const frontImgData = frontCanvas.toDataURL("image/jpeg", 0.95);
+            pdf.addImage(frontImgData, "JPEG", 0.05, 0.05, 3.0, 2.0);
+
+            // Page 2: Back
+            pdf.addPage([3.1, 2.1], "landscape");
+            const backCanvas = await html2canvas(backElement, {
+              scale: 3,
+              useCORS: true,
+              backgroundColor: "#ffffff",
+              logging: false,
+            });
+            const backImgData = backCanvas.toDataURL("image/jpeg", 0.95);
+            pdf.addImage(backImgData, "JPEG", 0.05, 0.05, 3.0, 2.0);
+
+            pdf.save(`${holder.name}_swim_pass.pdf`);
+          }
+        }
+      }
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 4000);
+    } catch (err) {
+      console.error("Download error:", err);
+      alert(lang === "zh" ? "生成下载文件失败，请重试！" : "Failed to compile download files, please try again.");
+    } finally {
+      setIsDownloading(false);
+      setDownloadProgress(null);
+    }
+  };
 
   // Custom high-fidelity high-contrast monochrome printing system (multiple cards: Front + Back on one page)
   const handlePrint = () => {
@@ -197,10 +301,10 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
               <div class="print-card-container">
                 <div style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; height: 100%; width: 100%; box-sizing: border-box; gap: 8px;">
                   
-                  <!-- Left side of back: Maximize QR code occupying the entire left section -->
-                  <div style="flex: 0 0 1.25in; display: flex; align-items: center; justify-content: center; height: 1.25in; width: 1.25in; border: 2px solid #000000; padding: 2px; border-radius: 5px; box-sizing: border-box; overflow: hidden; background: #ffffff;">
+                  <!-- Left side of back: Maximize QR code occupying the entire left section with spacious padding -->
+                  <div style="flex: 0 0 1.25in; display: flex; align-items: center; justify-content: center; height: 1.25in; width: 1.25in; border: 2px solid #000000; padding: 7px; border-radius: 5px; box-sizing: border-box; overflow: hidden; background: #ffffff;">
                     <div class="qr-target-print-back" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
-                      ${qrDataUrl ? `<img src="${qrDataUrl}" style="width: 1.2in; height: 1.2in; display: block;" />` : `<div style="font-size: 8px; color: #000; font-weight: bold;">Loading-QR</div>`}
+                      ${qrDataUrl ? `<img src="${qrDataUrl}" style="max-width: 100%; max-height: 100%; display: block; object-fit: contain;" />` : `<div style="font-size: 8px; color: #000; font-weight: bold;">Loading-QR</div>`}
                     </div>
                   </div>
 
@@ -605,6 +709,237 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
                   />
                 );
               })}
+
+              {/* --- DOWNLOAD ELEMENT EXTRACTION HOLDERS --- */}
+              {[
+                {
+                  id: member.id,
+                  name: member.name,
+                  phone: member.phone || "None",
+                  isPrincipal: true,
+                },
+                ...(member.subMembers || []).map(sub => ({
+                  id: sub.id,
+                  name: sub.name,
+                  phone: sub.phone || member.phone || "None",
+                  isPrincipal: false,
+                }))
+              ].map((holder) => {
+                const holderQrValue = simplifyQr
+                  ? `${currentOrigin}?id=${encodeURIComponent(holder.id)}&name=${encodeURIComponent(holder.name)}&start=${encodeURIComponent(member.startDate)}&end=${encodeURIComponent(member.endDate)}`
+                  : `${currentOrigin}?id=${encodeURIComponent(holder.id)}&name=${encodeURIComponent(holder.name)}&start=${encodeURIComponent(member.startDate)}&end=${encodeURIComponent(member.endDate)}&phone=${encodeURIComponent(holder.phone)}&plan=${encodeURIComponent(getNormalizedPlanName(member.plan, "en"))}`;
+
+                return (
+                  <div key={`dl-pkg-${holder.id}`} id={`download-card-pkg-${holder.id}`} className="bg-white p-4">
+                    
+                    {/* Front Card element */}
+                    <div 
+                      id={`download-card-front-${holder.id}`}
+                      className="w-[300px] h-[200px] bg-white text-black p-3.5 flex flex-col justify-between border-2 border-black rounded-xl select-none relative"
+                      style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+                    >
+                      <div className="flex justify-between items-start border-b-2 border-black pb-1.5" style={{ textDecoration: 'none' }}>
+                        <div className="text-left" style={{ textDecoration: 'none' }}>
+                          <h4 className="text-[12px] font-black tracking-wide leading-tight text-black" style={{ textDecoration: 'none' }}>
+                            SEAHORSE FITNESS INC
+                          </h4>
+                          <p className="text-[7.5px] text-slate-700 font-bold leading-normal mt-0.5">
+                            69 Columbia St, NY, NY 10002
+                          </p>
+                        </div>
+                        {!holder.isPrincipal && (
+                          <span className="px-1.5 py-0.5 rounded text-[7px] font-extrabold tracking-wider uppercase border border-black bg-white text-black">
+                            FAMILY PASS
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="my-auto py-1 flex flex-col justify-center text-left">
+                        <span className="text-[9.5px] font-black tracking-wide text-black block uppercase">
+                          GUEST NAME:
+                        </span>
+                        <h3 className="text-2xl font-black leading-none uppercase tracking-tight text-black border-b-2 border-black pb-0.5 my-1" style={{ textDecoration: 'none' }}>
+                          {holder.name}
+                        </h3>
+                        
+                        <div className="flex justify-between text-[9px] font-mono font-bold text-slate-800 mt-1">
+                          <span>TELEPHONE: {holder.phone}</span>
+                          <span className="bg-slate-100 px-1 rounded border border-slate-200">ID: {holder.id}</span>
+                        </div>
+                      </div>
+
+                      <div className="border-t-2 border-black pt-1 flex justify-start items-end text-left">
+                        <div className="font-mono leading-tight">
+                          <span className="text-[7px] text-slate-500 block font-extrabold leading-none uppercase">
+                            SWIM PASS VALIDITY PERIOD
+                          </span>
+                          <span className="text-[11px] font-black block tracking-tighter">
+                            {member.startDate} ~ {member.endDate}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Back Card element */}
+                    <div 
+                      id={`download-card-back-${holder.id}`}
+                      className="w-[300px] h-[200px] bg-white text-black p-3.5 flex flex-col justify-between border-2 border-black rounded-xl select-none"
+                      style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+                    >
+                      <div className="flex flex-row items-center justify-between h-full w-full gap-3">
+                        <div className="flex-shrink-0 flex items-center justify-center p-1.5 border-2 border-black rounded-xl bg-white shadow-sm" style={{ width: "110px", height: "110px" }}>
+                          <QRCodeCanvas 
+                            value={holderQrValue} 
+                            size={94} 
+                            level={simplifyQr ? "L" : "H"} 
+                            includeMargin={false}
+                          />
+                        </div>
+
+                        <div className="flex-1 flex flex-col justify-between h-full text-left py-0.5">
+                          <div>
+                            <h4 className="text-[9.5px] font-black tracking-wide leading-tight text-black flex items-center gap-1">
+                              SEAHORSE FITNESS
+                            </h4>
+                            <span className="text-[5.5px] text-slate-500 font-bold block leading-normal mt-0.5">
+                              69 Columbia St, NY, NY 10002
+                              <br />Cell: 347-272-2822
+                            </span>
+                          </div>
+
+                          <div className="border-t border-dashed border-slate-300 pt-1 flex-grow flex flex-col justify-center text-left">
+                            <span className="text-[6.5px] font-bold text-slate-700 block uppercase">
+                              Card Holder
+                            </span>
+                            <span className="text-[12.5px] font-black uppercase text-black font-sans leading-tight">
+                              {holder.name}
+                            </span>
+                            <span className="font-mono text-[7px] uppercase font-bold text-white bg-black px-1.5 py-0.5 rounded mt-1 block w-fit">
+                              ID: {holder.id}
+                            </span>
+                          </div>
+
+                          <div className="border-t border-black pt-1">
+                            <span className="text-[5.5px] font-bold text-slate-700 leading-tight block font-mono">
+                              SCAN QR CODE TO VERIFY PASS ELIGIBILITY
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Coupled Front and Back for single JPG representation */}
+                    <div 
+                      id={`download-card-combined-${holder.id}`}
+                      className="w-[340px] bg-white p-5 flex flex-col gap-4 items-center justify-center border border-slate-200 rounded-2xl"
+                    >
+                      {/* Embedded front card with exactly same style */}
+                      <div 
+                        className="w-[300px] h-[200px] bg-white text-black p-3.5 flex flex-col justify-between border-2 border-black rounded-xl select-none relative"
+                        style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+                      >
+                        <div className="flex justify-between items-start border-b-2 border-black pb-1.5">
+                          <div className="text-left">
+                            <h4 className="text-[12px] font-black tracking-wide leading-tight text-black">
+                              SEAHORSE FITNESS INC
+                            </h4>
+                            <p className="text-[7.5px] text-slate-700 font-bold leading-normal mt-0.5">
+                              69 Columbia St, NY, NY 10002
+                            </p>
+                          </div>
+                          {!holder.isPrincipal && (
+                            <span className="px-1.5 py-0.5 rounded text-[7px] font-extrabold tracking-wider uppercase border border-black bg-white text-black">
+                              FAMILY PASS
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="my-auto py-1 flex flex-col justify-center text-left">
+                          <span className="text-[9.5px] font-black tracking-wide text-black block uppercase">
+                            GUEST NAME:
+                          </span>
+                          <h3 className="text-2xl font-black leading-none uppercase tracking-tight text-black border-b-2 border-black pb-0.5 my-1">
+                            {holder.name}
+                          </h3>
+                          
+                          <div className="flex justify-between text-[9px] font-mono font-bold text-slate-800 mt-1 font-mono">
+                            <span>TELEPHONE: {holder.phone}</span>
+                            <span className="bg-slate-100 px-1 rounded border border-slate-200">ID: {holder.id}</span>
+                          </div>
+                        </div>
+
+                        <div className="border-t-2 border-black pt-1 flex justify-start items-end text-left">
+                          <div className="font-mono leading-tight">
+                            <span className="text-[7px] text-slate-500 block font-extrabold leading-none uppercase">
+                              SWIM PASS VALIDITY PERIOD
+                            </span>
+                            <span className="text-[11px] font-black block tracking-tighter">
+                              {member.startDate} ~ {member.endDate}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Decorative folding tag border */}
+                      <div className="w-full flex items-center justify-center gap-1.5 my-0.5 text-slate-400">
+                        <div className="h-px bg-dashed border-t border-slate-300 flex-1"></div>
+                        <span className="text-[8px] font-bold font-mono tracking-wider uppercase text-slate-400">FOLD OR CUT HERE</span>
+                        <div className="h-px bg-dashed border-t border-slate-300 flex-1"></div>
+                      </div>
+
+                      {/* Embedded back card with exactly same style */}
+                      <div 
+                        className="w-[300px] h-[200px] bg-white text-black p-3.5 flex flex-col justify-between border-2 border-black rounded-xl select-none"
+                        style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+                      >
+                        <div className="flex flex-row items-center justify-between h-full w-full gap-3">
+                          <div className="flex-shrink-0 flex items-center justify-center p-1.5 border-2 border-black rounded-xl bg-white shadow-sm" style={{ width: "110px", height: "110px" }}>
+                            <QRCodeCanvas 
+                              value={holderQrValue} 
+                              size={94} 
+                              level={simplifyQr ? "L" : "H"} 
+                              includeMargin={false}
+                            />
+                          </div>
+
+                          <div className="flex-1 flex flex-col justify-between h-full text-left py-0.5 font-sans">
+                            <div>
+                              <h4 className="text-[9.5px] font-black tracking-wide leading-tight text-black flex items-center gap-1">
+                                SEAHORSE FITNESS
+                              </h4>
+                              <span className="text-[5.5px] text-slate-500 font-bold block leading-normal mt-0.5">
+                                69 Columbia St, NY, NY 10002
+                                <br />Cell: 347-272-2822
+                              </span>
+                            </div>
+
+                            <div className="border-t border-dashed border-slate-300 pt-1 flex-grow flex flex-col justify-center text-left">
+                              <span className="text-[6.5px] font-bold text-slate-700 block uppercase">
+                                Card Holder
+                              </span>
+                              <span className="text-[12.5px] font-black uppercase text-black font-sans leading-tight">
+                                {holder.name}
+                              </span>
+                              <span className="font-mono text-[7px] uppercase font-bold text-white bg-black px-1.5 py-0.5 rounded mt-1 block w-fit">
+                                ID: {holder.id}
+                              </span>
+                            </div>
+
+                            <div className="border-t border-black pt-1">
+                              <span className="text-[5.5px] font-bold text-slate-700 leading-tight block font-mono">
+                                SCAN QR CODE TO VERIFY PASS ELIGIBILITY
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+
+                  </div>
+                );
+              })}
+
             </div>
 
           </div>
@@ -696,6 +1031,115 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
                 <p className="bg-slate-100/50 border border-slate-200 px-3 py-2 rounded-xl text-slate-700 text-xs leading-relaxed font-medium">{member.extraInfo}</p>
               </div>
             )}
+          </div>
+
+          {/* Card Download control suite */}
+          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4.5 space-y-3.5 shadow-sm text-left">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Download className="h-4.5 w-4.5 text-blue-650" />
+                <h4 className="font-extrabold text-slate-800 text-sm">
+                  {t.downloadModalTitle}
+                </h4>
+              </div>
+              <span className="text-[10px] font-black uppercase text-blue-600 bg-blue-50 border border-blue-100 rounded-full px-2.5 py-0.5">
+                Multi-pass Suite
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-500 font-bold leading-normal text-left">
+              {t.downloadSelectMember}
+            </p>
+
+            <div className="flex flex-col gap-2 rounded-xl border border-slate-150 p-3 bg-white">
+              <span className="text-[10.5px] font-bold text-slate-650 text-left block">
+                {t.downloadChooseFormat}
+              </span>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => setDownloadFormat("JPG")}
+                  className={`py-2 px-3 text-xs font-black rounded-lg border transition-all cursor-pointer text-center ${
+                    downloadFormat === "JPG"
+                      ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                      : "bg-white text-slate-705 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  JPG IMAGE
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDownloadFormat("PDF")}
+                  className={`py-2 px-3 text-xs font-black rounded-lg border transition-all cursor-pointer text-center ${
+                    downloadFormat === "PDF"
+                      ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                      : "bg-white text-slate-705 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  PDF DOCUMENT
+                </button>
+              </div>
+              <p className="text-[9.5px] text-slate-400 font-bold mt-1 text-left">
+                {downloadFormat === "JPG" ? t.downloadFormatJPG : t.downloadFormatPDF}
+              </p>
+            </div>
+
+            {/* List of members to show what's being downloaded */}
+            <div className="bg-slate-100/50 rounded-xl p-2.5 border border-slate-200 space-y-1.5 text-xs text-left font-semibold text-slate-600 max-h-32 overflow-y-auto">
+              <div className="flex justify-between items-center bg-white border border-slate-150 p-1.5 px-2.5 rounded-lg shadow-2xs">
+                <span>👤 {member.name} (主会员 • {member.id})</span>
+                <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-150 px-1.5 rounded font-black uppercase">Ready</span>
+              </div>
+              {member.subMembers?.map((sub) => (
+                <div key={sub.id} className="flex justify-between items-center bg-white border border-slate-150 p-1.5 px-2.5 rounded-lg shadow-2xs">
+                  <span>👥 {sub.name} (副会员 • {sub.id} • {sub.relationship})</span>
+                  <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-150 px-1.5 rounded font-black uppercase">Ready</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Download Button Actions */}
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={handleDownloadAll}
+                disabled={isDownloading}
+                className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold transition shadow-sm text-xs cursor-pointer ${
+                  isDownloading 
+                    ? "bg-slate-200 text-slate-450 cursor-not-allowed border border-slate-350"
+                    : "bg-emerald-600 hover:bg-emerald-750 text-white hover:shadow-md active:scale-[0.99] transition-all duration-150"
+                }`}
+              >
+                {isDownloading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-emerald-700" />
+                    <span>
+                      {t.downloadingState} ({downloadProgress ? `${downloadProgress.current}/${downloadProgress.total}` : "..."})
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    <span>{t.btnDownloadCards}</span>
+                  </>
+                )}
+              </button>
+
+              {/* Progress and Success Visualizations */}
+              <AnimatePresence>
+                {downloadSuccess && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-150 rounded-xl p-2.5 text-xs font-black justify-center"
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0 animate-bounce" />
+                    <span>{t.downloadsCompleted}</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           {/* Action Row */}

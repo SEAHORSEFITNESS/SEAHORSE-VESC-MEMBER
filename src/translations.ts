@@ -138,6 +138,15 @@ export const TRANSLATIONS = {
     btnPrintDouble: "Print Double-Sided Card (3'' x 2'')",
     btnCloseCard: "Close Pass",
     cardSmsCopied: "Unique verification link copied to clipboard! Share this link to test scanning.",
+    btnDownloadCards: "Batch Download Cards",
+    downloadModalTitle: "Download Membership Pass Cards",
+    downloadChooseFormat: "Select Download File Format:",
+    downloadFormatJPG: "High-Resolution JPG Image (Front/Back merged)",
+    downloadFormatPDF: "Standard PDF document (Front/Back standalone pages)",
+    downloadSelectMember: "The system will sequentially produce separate files for each individual (main and family sub-members):",
+    downloadsCompleted: "All selected pass files generated and downloaded successfully!",
+    downloadingState: "Assembling graphics...",
+    downloadSingleName: "{name}'s Membership Pass",
 
     // Card specifics
     frontSideTitle: "Front Side (Text Card Layout)",
@@ -314,6 +323,15 @@ export const TRANSLATIONS = {
     btnPrintDouble: "黑白并排双面打印 (正面 + 背面 QR 3'' x 2'')",
     btnCloseCard: "关闭卡面预览",
     cardSmsCopied: "专属游泳校验链接复制成功！此链接部署在网页后，可免登录扫描直接核查状态。",
+    btnDownloadCards: "一键下载会员卡",
+    downloadModalTitle: "下载会员通行卡",
+    downloadChooseFormat: "请选择下载文件格式：",
+    downloadFormatJPG: "高画质 JPG 图片 (正面与反面拼接)",
+    downloadFormatPDF: "标准 PDF 文档 (适合纸质打印/保存)",
+    downloadSelectMember: "系统将依次下载以下每位成员（主卡与随同副卡）的独立卡片文件：",
+    downloadsCompleted: "所有会员通行卡文件生成并下载成功！",
+    downloadingState: "正在拼装生成文件中...",
+    downloadSingleName: "{name} 的会员卡",
 
     // Card specifics
     frontSideTitle: "卡片正面预览 (信息标识面)",
