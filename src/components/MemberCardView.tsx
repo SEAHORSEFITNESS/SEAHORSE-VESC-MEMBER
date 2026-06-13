@@ -14,18 +14,12 @@ import {
   DollarSign, 
   BellRing,
   Clock,
-  Languages,
   ChevronRight,
-  UserPlus,
-  Download,
-  Loader2,
-  CheckCircle2
+  UserPlus
 } from "lucide-react";
 import { Member, SubMember } from "../types";
 import { TRANSLATIONS, getNormalizedPlanName } from "../translations";
 import { motion, AnimatePresence } from "motion/react";
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
 
 interface MemberCardViewProps {
   member: Member;
@@ -78,108 +72,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
     ? `${currentOrigin}?id=${encodedId}&name=${encodedName}&start=${encodedStart}&end=${encodedEnd}`
     : `${currentOrigin}?id=${encodedId}&name=${encodedName}&start=${encodedStart}&end=${encodedEnd}&phone=${encodedPhone}&plan=${encodedPlan}`;
 
-  const [downloadFormat, setDownloadFormat] = useState<"PDF" | "JPG">("JPG");
-  const [isDownloading, setIsDownloading] = useState<boolean>(false);
-  const [downloadProgress, setDownloadProgress] = useState<{current: number, total: number} | null>(null);
-  const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
 
-  const handleDownloadAll = async () => {
-    setIsDownloading(true);
-    setDownloadSuccess(false);
-
-    const holders = [
-      {
-        id: member.id,
-        name: member.name,
-        phone: member.phone || "None",
-        isPrincipal: true,
-      },
-      ...(member.subMembers || []).map(sub => ({
-        id: sub.id,
-        name: sub.name,
-        phone: sub.phone || member.phone || "None",
-        isPrincipal: false,
-      }))
-    ];
-
-    setDownloadProgress({ current: 0, total: holders.length });
-
-    try {
-      for (let i = 0; i < holders.length; i++) {
-        const holder = holders[i];
-        setDownloadProgress({ current: i + 1, total: holders.length });
-
-        // Let the DOM update and image load
-        await new Promise((resolve) => setTimeout(resolve, 250));
-
-        if (downloadFormat === "JPG") {
-          const combinedElement = document.getElementById(`download-card-combined-${holder.id}`);
-          if (combinedElement) {
-            const canvas = await html2canvas(combinedElement, {
-              scale: 3,
-              useCORS: true,
-              backgroundColor: "#ffffff",
-              logging: false,
-            });
-            const imgData = canvas.toDataURL("image/jpeg", 0.95);
-            
-            const link = document.createElement("a");
-            link.href = imgData;
-            link.download = `${holder.name}_swim_pass.jpg`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-          }
-        } else {
-          const frontElement = document.getElementById(`download-card-front-${holder.id}`);
-          const backElement = document.getElementById(`download-card-back-${holder.id}`);
-
-          if (frontElement && backElement) {
-            const pdf = new jsPDF({
-              orientation: "landscape",
-              unit: "in",
-              format: [3.1, 2.1],
-            });
-
-            // Page 1: Front
-            const frontCanvas = await html2canvas(frontElement, {
-              scale: 3,
-              useCORS: true,
-              backgroundColor: "#ffffff",
-              logging: false,
-            });
-            const frontImgData = frontCanvas.toDataURL("image/jpeg", 0.95);
-            pdf.addImage(frontImgData, "JPEG", 0.05, 0.05, 3.0, 2.0);
-
-            // Page 2: Back
-            pdf.addPage([3.1, 2.1], "landscape");
-            const backCanvas = await html2canvas(backElement, {
-              scale: 3,
-              useCORS: true,
-              backgroundColor: "#ffffff",
-              logging: false,
-            });
-            const backImgData = backCanvas.toDataURL("image/jpeg", 0.95);
-            pdf.addImage(backImgData, "JPEG", 0.05, 0.05, 3.0, 2.0);
-
-            pdf.save(`${holder.name}_swim_pass.pdf`);
-          }
-        }
-      }
-      setDownloadSuccess(true);
-      setTimeout(() => setDownloadSuccess(false), 4000);
-    } catch (err) {
-      console.error("Download error:", err);
-      const errMsg = err instanceof Error ? err.message : String(err);
-      alert(lang === "zh" 
-        ? `生成下载文件失败，请重新加载页面或重试！\n错误详情: ${errMsg}` 
-        : `Failed to compile download files, please refresh or try again.\nError details: ${errMsg}`
-      );
-    } finally {
-      setIsDownloading(false);
-      setDownloadProgress(null);
-    }
-  };
 
   // Custom high-fidelity high-contrast monochrome printing system (multiple cards: Front + Back on one page)
   const handlePrint = () => {
@@ -253,94 +146,108 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
 
         return `
           <!-- --- CARD GROUP FOR ${item.name} --- -->
-          <div class="card-group" style="page-break-inside: avoid; display: flex; flex-direction: column; gap: 15px; align-items: center; justify-content: center; margin-bottom: 25px;">
+          <div class="card-group" style="page-break-inside: avoid; display: flex; flex-direction: column; gap: 15px; align-items: center; justify-content: center; margin-bottom: 25px; font-family: system-ui, -apple-system, sans-serif;">
             
             <!-- 1. FRONT CARD SECTION -->
-            <div class="print-card-outer">
-              <div class="print-card-container">
+            <div class="print-card-outer" style="width: 3.1in; height: 2.1in; display: flex; justify-content: center; align-items: center; border: 1px dashed #000000; position: relative; box-sizing: border-box; padding: 0.05in; background-color: #ffffff;">
+              <div class="print-card-container" style="width: 3in !important; height: 2in !important; position: relative !important; box-sizing: border-box !important; border: 2px solid #000000 !important; border-radius: 6px !important; padding: 0px !important; color: #000000 !important; background: #ffffff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; overflow: hidden !important;">
+                
                 <!-- Company Header -->
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #000000; padding-bottom: 4px; box-sizing: border-box; width: 100%;">
-                  <div style="flex: 1; min-width: 0; padding-right: 4px; box-sizing: border-box; text-align: left;">
+                <div style="position: absolute; top: 12px; left: 12px; width: 264px; height: 32px; box-sizing: border-box;">
+                  <div style="position: absolute; left: 0; top: 0; width: 180px; text-align: left; box-sizing: border-box;">
                     ${companyHeader}
                   </div>
-                  <div style="flex-shrink: 0; text-align: right;">
+                  <div style="position: absolute; right: 0; top: 0; text-align: right;">
                     ${badgeHTML}
                   </div>
                 </div>
 
-                <!-- Fields -->
-                <div style="margin-top: 5px; display: flex; flex-direction: column; justify-content: center; flex-grow: 1; padding: 2px 0; box-sizing: border-box;">
-                  <div style="margin-bottom: 2px;">
-                    <span style="font-size: 10px; font-weight: 900; color: #000000; text-transform: uppercase; letter-spacing: 0.2px; font-family: system-ui, -apple-system, sans-serif;">${nameLabel}:</span>
-                    <div style="font-size: 24px; font-weight: 950; font-family: system-ui, -apple-system, sans-serif; text-transform: uppercase; border-bottom: 2px solid #000000; padding-bottom: 1px; color: #000000; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px;">
-                      ${item.name}
-                    </div>
-                  </div>
-                  <div style="display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; width: 100%;">
-                    <div style="text-align: left;">
-                      <span class="print-info-label">${phoneLabel}:</span>
-                      <div class="print-info-val" style="font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-size: 9.5px; font-weight: 850; color: #000000;">${item.phone}</div>
-                    </div>
-                    <div style="text-align: right;">
-                      <span class="print-info-label">${cardIdLabel}:</span>
-                      <div class="print-info-val" style="font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-size: 9.5px; font-weight: 900; background: #ffffff; padding: 1.5px 4.5px; border-radius: 2px; color: #000000; border: 1.5px solid #000000; display: inline-block;">${item.id}</div>
-                    </div>
+                <!-- Divider 1 -->
+                <div style="position: absolute; top: 46px; left: 12px; width: 264px; height: 1.5px; background-color: #000000;"></div>
+
+                <!-- Guest Name Block -->
+                <div style="position: absolute; top: 52px; left: 12px; width: 264px; height: 48px; box-sizing: border-box;">
+                  <span style="position: absolute; top: 0; left: 0; font-size: 9.5px; font-weight: 800; line-height: 1.1; color: #000000; text-transform: uppercase; letter-spacing: 0.1px; font-family: system-ui, -apple-system, sans-serif;">${nameLabel}:</span>
+                  <div style="position: absolute; top: 14px; left: 0; width: 264px; font-size: 21px; font-weight: 900; font-family: system-ui, -apple-system, sans-serif; text-transform: uppercase; color: #000000; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; box-sizing: border-box;">
+                    ${item.name}
                   </div>
                 </div>
 
-                <!-- Footer Exp times -->
-                <div class="print-info-row" style="display: flex; justify-content: flex-start; align-items: flex-end; box-sizing: border-box; width: 100%;">
-                  <div style="text-align: left;">
-                    <span class="print-info-label">${dateLabel}:</span>
-                    <div style="font-size: 10.5px; font-weight: 900; font-family: monospace, SFMono-Regular, Consolas, sans-serif; color: #000000; margin-top: 1.5px;">
-                      ${member.startDate} <span style="font-weight: 800;">~</span> ${member.endDate}
-                    </div>
+                <!-- Divider 2 -->
+                <div style="position: absolute; top: 102px; left: 12px; width: 264px; height: 1.5px; background-color: #000000;"></div>
+
+                <!-- Telephone & ID Row -->
+                <div style="position: absolute; top: 108px; left: 12px; width: 264px; height: 30px; box-sizing: border-box;">
+                  <div style="position: absolute; left: 0; top: 0; width: 140px; text-align: left; display: block;">
+                    <span style="font-size: 6.5px; font-weight: 800; color: #000000; text-transform: uppercase; letter-spacing: 0.2px; font-family: system-ui, -apple-system, sans-serif; line-height: 1.1; display: block; margin: 0;">${phoneLabel}:</span>
+                    <div style="font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-size: 9.5px; font-weight: 800; color: #000000; line-height: 1.1; margin-top: 1.5px;">${item.phone}</div>
+                  </div>
+                  <div style="position: absolute; right: 0; top: 0; width: 104px; text-align: right; display: block;">
+                    <span style="font-size: 6.5px; font-weight: 800; color: #000000; text-transform: uppercase; letter-spacing: 0.2px; font-family: system-ui, -apple-system, sans-serif; line-height: 1.1; display: block; margin-right: 2px; margin-bottom: 2px;">${cardIdLabel}:</span>
+                    <div style="font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-size: 9px; font-weight: 900; background: #ffffff; width: 104px; height: 18px; border-radius: 2px; color: #000000; border: 1.5px solid #000000; display: block; text-align: center; line-height: 14.5px; box-sizing: border-box;">${item.id}</div>
                   </div>
                 </div>
+
+                <!-- Divider 3 -->
+                <div style="position: absolute; top: 142px; left: 12px; width: 264px; height: 1.5px; background-color: #000000;"></div>
+
+                <!-- Footer Exp Times -->
+                <div style="position: absolute; top: 147px; left: 12px; width: 264px; height: 40px; box-sizing: border-box;">
+                  <span style="position: absolute; top: 0; left: 0; font-size: 6.5px; font-weight: 800; color: #000000; text-transform: uppercase; letter-spacing: 0.2px; font-family: system-ui, -apple-system, sans-serif; line-height: 1.1;">${dateLabel}:</span>
+                  <div style="position: absolute; top: 12px; left: 0; font-size: 10.5px; font-weight: 900; font-family: monospace, SFMono-Regular, Consolas, sans-serif; color: #000000; line-height: 1.1; width: 100%;">
+                    ${member.startDate} <span style="font-weight: 800;">~</span> ${member.endDate}
+                  </div>
+                </div>
+
               </div>
             </div>
 
             <!-- 2. BACK CARD SECTION IN LEFT-RIGHT SPLIT -->
-            <div class="print-card-outer">
-              <div class="print-card-container">
-                <div style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; height: 100%; width: 100%; box-sizing: border-box; gap: 8px;">
+            <div class="print-card-outer" style="width: 3.1in; height: 2.1in; display: flex; justify-content: center; align-items: center; border: 1px dashed #000000; position: relative; box-sizing: border-box; padding: 0.05in; background-color: #ffffff;">
+              <div class="print-card-container" style="width: 3in !important; height: 2in !important; position: relative !important; box-sizing: border-box !important; border: 2px solid #000000 !important; border-radius: 6px !important; padding: 0px !important; color: #000000 !important; background: #ffffff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; overflow: hidden !important;">
+                
+                <!-- Left side of back: Maximize QR code occupying the entire left section with spacious padding -->
+                <div style="position: absolute; top: 12px; left: 12px; width: 120px; height: 120px; border: 2px solid #000000; padding: 7px; border-radius: 5px; box-sizing: border-box; overflow: hidden; background: #ffffff; display: block;">
+                  <div class="qr-target-print-back" style="width: 100%; height: 100%; display: block;">
+                    ${qrDataUrl ? `<img src="${qrDataUrl}" style="width: 100%; height: 100%; display: block; object-fit: contain;" />` : `<div style="font-size: 8px; color: #000; font-weight: bold; text-align: center; line-height: 100px;">Loading-QR</div>`}
+                  </div>
+                </div>
+
+                <!-- Right side of back: text information, identifier & guidelines (Fixed height parts) -->
+                <div style="position: absolute; top: 12px; left: 144px; width: 132px; height: 168px; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif;">
                   
-                  <!-- Left side of back: Maximize QR code occupying the entire left section with spacious padding -->
-                  <div style="flex: 0 0 1.25in; display: flex; align-items: center; justify-content: center; height: 1.25in; width: 1.25in; border: 2px solid #000000; padding: 7px; border-radius: 5px; box-sizing: border-box; overflow: hidden; background: #ffffff;">
-                    <div class="qr-target-print-back" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
-                      ${qrDataUrl ? `<img src="${qrDataUrl}" style="max-width: 100%; max-height: 100%; display: block; object-fit: contain;" />` : `<div style="font-size: 8px; color: #000; font-weight: bold;">Loading-QR</div>`}
+                  <!-- Top Info Block: Height 28px -->
+                  <div style="position: absolute; top: 0; left: 0; width: 132px; height: 28px; box-sizing: border-box;">
+                    <div style="font-size: 8px; font-weight: 900; line-height: 1.15; font-family: system-ui, -apple-system, sans-serif; color: #000000; text-transform: uppercase; letter-spacing: 0.1px;">
+                      SEAHORSE FITNESS INC
+                    </div>
+                    <div style="font-size: 5.5px; color: #111111; line-height: 1.15; margin-top: 2px; font-family: system-ui, -apple-system, sans-serif;">
+                      69 Columbia St, NY 10002 • 347-272-2822
                     </div>
                   </div>
 
-                  <!-- Right side of back: text information, identifier & guidelines -->
-                  <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; height: 100%; box-sizing: border-box; text-align: left; padding: 2px 0; min-width: 0;">
-                    <div>
-                      <div style="font-size: 8px; font-weight: 900; line-height: 1.1; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; color: #000000; text-transform: uppercase; letter-spacing: 0.1px;">
-                        SEAHORSE FITNESS INC
-                      </div>
-                      <div style="font-size: 5.5px; color: #111111; line-height: 1.15; margin-top: 1.5px; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;">
-                        69 Columbia St, NY 10002 • 347-272-2822
-                      </div>
+                  <!-- Middle Card Holder Info: Height 60px -->
+                  <div style="position: absolute; top: 44px; left: 0; width: 132px; height: 60px; box-sizing: border-box;">
+                    <div style="font-size: 6px; text-transform: uppercase; font-weight: 800; color: #111111; letter-spacing: 0.1px; font-family: system-ui, -apple-system, sans-serif; line-height: 1.1;">
+                      CARD HOLDER
                     </div>
-
-                    <div style="margin: 3px 0; padding-top: 3.5px; flex-grow: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0;">
-                      <div style="font-size: 6px; text-transform: uppercase; font-weight: 800; color: #111111; letter-spacing: 0.1px; font-family: system-ui, sans-serif;">
-                        CARD HOLDER
-                      </div>
-                      <div style="font-size: 11px; font-weight: 950; margin-top: 1px; text-transform: uppercase; font-family: system-ui, sans-serif; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #000000;">
-                        ${item.name}
-                      </div>
-                      <div style="font-size: 7.5px; font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-weight: 900; background: #ffffff; color: #000000 !important; display: inline-block; padding: 1.5px 4.5px; margin-top: 2.5px; border-radius: 2px; width: fit-content; border: 1.5px solid #000000;">
-                        ID: ${item.id}
-                      </div>
+                    <div style="font-size: 11px; font-weight: 900; margin-top: 3.5px; text-transform: uppercase; font-family: system-ui, -apple-system, sans-serif; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #000000; width: 100%;">
+                      ${item.name}
                     </div>
+                    <div style="position: absolute; top: 32px; left: 0; width: 104px; height: 18px; font-size: 7.5px; font-family: monospace, SFMono-Regular, Consolas, sans-serif; font-weight: 950; background: #ffffff; color: #000000 !important; display: block; text-align: center; line-height: 14.5px; border-radius: 2px; border: 1.5px solid #000000; box-sizing: border-box;">
+                      ID: ${item.id}
+                    </div>
+                  </div>
 
-                    <div style="font-size: 5.5px; font-weight: 900; line-height: 1.25; padding-top: 3px; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; color: #000000;">
+                  <!-- Bottom Print Policy: Height 22px -->
+                  <div style="position: absolute; top: 140px; left: 0; width: 132px; height: 22px; box-sizing: border-box;">
+                    <div style="font-size: 5.5px; font-weight: 900; line-height: 1.15; font-family: system-ui, -apple-system, sans-serif; color: #000000;">
                       ${backFooter}
                     </div>
                   </div>
 
                 </div>
+
               </div>
             </div>
 
@@ -415,7 +322,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
                 color: #000000;
                 text-transform: uppercase;
                 letter-spacing: 0.2px;
-                font-family: system-ui, -apple-system, sans-serif;
+                font-family: Arial, Helvetica, sans-serif;
               }
 
               .print-info-val {
@@ -451,6 +358,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
       onClick={onClose}
       className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
     >
+
       <motion.div 
         onClick={(e) => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.95 }}
@@ -473,15 +381,6 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
           </div>
           
           <div className="flex items-center gap-3">
-            {/* Language Switch */}
-            <button
-              onClick={() => setLang(lang === "en" ? "zh" : "en")}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-bold transition active:scale-95 cursor-pointer border border-blue-150 animate-pulse"
-            >
-              <Languages className="h-3.5 w-3.5" />
-              <span>{lang === "en" ? "English" : "简体中文"}</span>
-            </button>
-
             <button 
               onClick={onClose}
               className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
@@ -1037,114 +936,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
             )}
           </div>
 
-          {/* Card Download control suite */}
-          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4.5 space-y-3.5 shadow-sm text-left">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Download className="h-4.5 w-4.5 text-blue-650" />
-                <h4 className="font-extrabold text-slate-800 text-sm">
-                  {t.downloadModalTitle}
-                </h4>
-              </div>
-              <span className="text-[10px] font-black uppercase text-blue-600 bg-blue-50 border border-blue-100 rounded-full px-2.5 py-0.5">
-                Multi-pass Suite
-              </span>
-            </div>
 
-            <p className="text-[11px] text-slate-500 font-bold leading-normal text-left">
-              {t.downloadSelectMember}
-            </p>
-
-            <div className="flex flex-col gap-2 rounded-xl border border-slate-150 p-3 bg-white">
-              <span className="text-[10.5px] font-bold text-slate-650 text-left block">
-                {t.downloadChooseFormat}
-              </span>
-              <div className="grid grid-cols-2 gap-2 mt-1">
-                <button
-                  type="button"
-                  onClick={() => setDownloadFormat("JPG")}
-                  className={`py-2 px-3 text-xs font-black rounded-lg border transition-all cursor-pointer text-center ${
-                    downloadFormat === "JPG"
-                      ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                      : "bg-white text-slate-705 border-slate-200 hover:bg-slate-50"
-                  }`}
-                >
-                  JPG IMAGE
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDownloadFormat("PDF")}
-                  className={`py-2 px-3 text-xs font-black rounded-lg border transition-all cursor-pointer text-center ${
-                    downloadFormat === "PDF"
-                      ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                      : "bg-white text-slate-705 border-slate-200 hover:bg-slate-50"
-                  }`}
-                >
-                  PDF DOCUMENT
-                </button>
-              </div>
-              <p className="text-[9.5px] text-slate-400 font-bold mt-1 text-left">
-                {downloadFormat === "JPG" ? t.downloadFormatJPG : t.downloadFormatPDF}
-              </p>
-            </div>
-
-            {/* List of members to show what's being downloaded */}
-            <div className="bg-slate-100/50 rounded-xl p-2.5 border border-slate-200 space-y-1.5 text-xs text-left font-semibold text-slate-600 max-h-32 overflow-y-auto">
-              <div className="flex justify-between items-center bg-white border border-slate-150 p-1.5 px-2.5 rounded-lg shadow-2xs">
-                <span>👤 {member.name} (主会员 • {member.id})</span>
-                <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-150 px-1.5 rounded font-black uppercase">Ready</span>
-              </div>
-              {member.subMembers?.map((sub) => (
-                <div key={sub.id} className="flex justify-between items-center bg-white border border-slate-150 p-1.5 px-2.5 rounded-lg shadow-2xs">
-                  <span>👥 {sub.name} (副会员 • {sub.id} • {sub.relationship})</span>
-                  <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-150 px-1.5 rounded font-black uppercase">Ready</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Download Button Actions */}
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={handleDownloadAll}
-                disabled={isDownloading}
-                className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold transition shadow-sm text-xs cursor-pointer ${
-                  isDownloading 
-                    ? "bg-slate-200 text-slate-450 cursor-not-allowed border border-slate-350"
-                    : "bg-emerald-600 hover:bg-emerald-750 text-white hover:shadow-md active:scale-[0.99] transition-all duration-150"
-                }`}
-              >
-                {isDownloading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin text-emerald-700" />
-                    <span>
-                      {t.downloadingState} ({downloadProgress ? `${downloadProgress.current}/${downloadProgress.total}` : "..."})
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="h-4 w-4" />
-                    <span>{t.btnDownloadCards}</span>
-                  </>
-                )}
-              </button>
-
-              {/* Progress and Success Visualizations */}
-              <AnimatePresence>
-                {downloadSuccess && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-150 rounded-xl p-2.5 text-xs font-black justify-center"
-                  >
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0 animate-bounce" />
-                    <span>{t.downloadsCompleted}</span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
 
           {/* Action Row */}
           <div className="flex gap-4">

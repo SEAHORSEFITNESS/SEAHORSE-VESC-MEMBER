@@ -39,75 +39,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 
 // Pre-populated demonstration data for immediate live preview
-const INITIAL_MOCK_MEMBERS: Member[] = [
-  {
-    id: "SWIM-1001",
-    name: "Alice Johnson",
-    phone: "347-221-9988",
-    price: 4500,
-    plan: "Annual Pass (Full Year VIP Exclusive)",
-    startDate: "2026-05-01",
-    endDate: "2027-05-01",
-    extraInfo: "Senior Swimmer, focuses on backstroke. Keeps locker number 3.",
-    lastPaymentDate: "2026-05-01",
-    alertSent: false,
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: "SWIM-1002",
-    name: "Bob Zhang",
-    phone: "917-556-2811",
-    price: 600,
-    plan: "Monthly Pass (Regular Swimmer)",
-    startDate: "2026-05-24",
-    endDate: "2026-06-24", // Expiring soon in < 7 days
-    extraInfo: "Requesting early notification follow up. Deep-water test cleared.",
-    lastPaymentDate: "2026-05-24",
-    alertSent: true,
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: "SWIM-1003",
-    name: "David Smith",
-    phone: "646-778-9022",
-    price: 1500,
-    plan: "Quarterly Pass (Seasonal Swim)",
-    startDate: "2026-02-10",
-    endDate: "2026-05-10", // Deprecated/Expired member
-    extraInfo: "Has been notified about annual custom upgrades.",
-    lastPaymentDate: "2026-02-10",
-    alertSent: true,
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: "SWIM-1004",
-    name: "Emma Wilson",
-    phone: "347-810-7755",
-    price: 600,
-    plan: "Monthly Pass (Regular Swimmer)",
-    startDate: "2026-05-10",
-    endDate: "2026-06-10", // Active month card
-    extraInfo: "Novice swimmer, lifeguards please pay extra attention.",
-    lastPaymentDate: "2026-05-10",
-    alertSent: false,
-    createdAt: new Date().toISOString(),
-    subMembers: [
-      {
-        id: "SWIM-1004-A",
-        name: "Chloe Wilson",
-        relationship: "Child",
-        phone: "347-810-7766",
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: "SWIM-1004-B",
-        name: "Arthur Wilson",
-        relationship: "Spouse",
-        createdAt: new Date().toISOString()
-      }
-    ]
-  }
-];
+const INITIAL_MOCK_MEMBERS: Member[] = [];
 
 
 const getInitialGoogleSheetUrl = (): string => {
@@ -207,6 +139,24 @@ export default function App() {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [isSyncDialogOpen, setIsSyncDialogOpen] = useState<boolean>(false);
 
+  const saveSystemSettingsOnServer = async (updatedProfiles: any[], updatedActiveId: string, updatedLang: string) => {
+    try {
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: {
+            profiles: updatedProfiles,
+            activeProfileId: updatedActiveId,
+            lang: updatedLang
+          }
+        })
+      });
+    } catch (e) {
+      console.warn("Failed to save settings to server:", e);
+    }
+  };
+
   // Helper to update active profile traits
   const updateProfileProperties = (profileId: string, updates: Partial<{
     name: string;
@@ -217,6 +167,7 @@ export default function App() {
     setProfiles((prev) => {
       const updated = prev.map((p) => (p.id === profileId ? { ...p, ...updates } : p));
       localStorage.setItem("swimpool_company_profiles", JSON.stringify(updated));
+      saveSystemSettingsOnServer(updated, activeProfileId, lang);
       return updated;
     });
   };
@@ -329,58 +280,140 @@ export default function App() {
     const nextLang = selectedVal ? selectedVal : (lang === "en" ? "zh" : "en");
     setLang(nextLang);
     localStorage.setItem("swimpool_lang", nextLang);
+    saveSystemSettingsOnServer(profiles, activeProfileId, nextLang);
   };
 
   const t = TRANSLATIONS[lang];
 
   // Retrieve storage on mount dynamically keyed by active company profile
   useEffect(() => {
-    const activeProfId = localStorage.getItem("swimpool_active_profile_id") || "default";
-    setActiveProfileId(activeProfId);
+    const initApp = async () => {
+      let currentProfiles = [...profiles];
+      let currentActiveId = activeProfileId;
+      let currentLang = lang;
 
-    const dbKey = activeProfId === "default" ? "swimpool_member_db" : `swimpool_member_db_${activeProfId}`;
-    const stored = localStorage.getItem(dbKey);
-    let currentLocal: Member[] = [];
-    if (stored) {
       try {
-        currentLocal = JSON.parse(stored);
-        setMembers(currentLocal);
-      } catch (e) {
-        console.error("Failed to parse database, reloading defaults", e);
-        currentLocal = INITIAL_MOCK_MEMBERS;
-        setMembers(INITIAL_MOCK_MEMBERS);
+        const response = await fetch("/api/settings");
+        const json = await response.json();
+        if (json.status === "ok" && json.settings) {
+          const s = json.settings;
+          if (s.profiles) {
+            setProfiles(s.profiles);
+            currentProfiles = s.profiles;
+            localStorage.setItem("swimpool_company_profiles", JSON.stringify(s.profiles));
+          }
+          if (s.activeProfileId) {
+            setActiveProfileId(s.activeProfileId);
+            currentActiveId = s.activeProfileId;
+            localStorage.setItem("swimpool_active_profile_id", s.activeProfileId);
+          }
+          if (s.lang) {
+            setLang(s.lang);
+            currentLang = s.lang;
+            localStorage.setItem("swimpool_lang", s.lang);
+          }
+        } else {
+          // If not configured, save current settings from local to server
+          await fetch("/api/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              settings: {
+                profiles,
+                activeProfileId,
+                lang
+              }
+            })
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to fetch settings from backend, using local", err);
       }
-    } else {
-      currentLocal = INITIAL_MOCK_MEMBERS;
-      setMembers(INITIAL_MOCK_MEMBERS);
-      localStorage.setItem(dbKey, JSON.stringify(INITIAL_MOCK_MEMBERS));
-    }
 
-    // Load active profile's spreadsheet options
-    const activeProf = profiles.find(p => p.id === activeProfId);
-    if (activeProf) {
-      setGoogleSheetUrl(activeProf.sheetUrl || "");
-      setSyncEnabled(!!activeProf.syncEnabled);
-      setLastSyncedTime(activeProf.lastSyncedTime || "");
+      // Load members for active profiles
+      try {
+        const membersRes = await fetch(`/api/members/${currentActiveId}`);
+        const membersJson = await membersRes.json();
+        if (membersJson.status === "ok" && membersJson.members) {
+          setMembers(membersJson.members);
+          const dbKey = currentActiveId === "default" ? "swimpool_member_db" : `swimpool_member_db_${currentActiveId}`;
+          localStorage.setItem(dbKey, JSON.stringify(membersJson.members));
+        } else {
+          // If no members on backend, push whatever is in localStorage
+          const dbKey = currentActiveId === "default" ? "swimpool_member_db" : `swimpool_member_db_${currentActiveId}`;
+          const localStored = localStorage.getItem(dbKey);
+          let listToPush = INITIAL_MOCK_MEMBERS;
+          if (localStored) {
+            try {
+              listToPush = JSON.parse(localStored);
+            } catch (e) {
+              listToPush = INITIAL_MOCK_MEMBERS;
+            }
+          }
+          setMembers(listToPush);
+          localStorage.setItem(dbKey, JSON.stringify(listToPush));
+          
+          await fetch(`/api/members/${currentActiveId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ members: listToPush })
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to fetch members from backend, using local", err);
+        // Fallback to local
+        const dbKey = currentActiveId === "default" ? "swimpool_member_db" : `swimpool_member_db_${currentActiveId}`;
+        const stored = localStorage.getItem(dbKey);
+        if (stored) {
+          try {
+            setMembers(JSON.parse(stored));
+          } catch (e) {
+            setMembers(INITIAL_MOCK_MEMBERS);
+          }
+        } else {
+          setMembers(INITIAL_MOCK_MEMBERS);
+        }
+      }
 
-      if (activeProf.syncEnabled && activeProf.sheetUrl) {
-        pullFromGoogleSheet(activeProf.sheetUrl);
+      // Sync active profile's spreadsheet options
+      const activeProf = currentProfiles.find(p => p.id === currentActiveId);
+      if (activeProf) {
+        setGoogleSheetUrl(activeProf.sheetUrl || "");
+        setSyncEnabled(!!activeProf.syncEnabled);
+        setLastSyncedTime(activeProf.lastSyncedTime || "");
+
+        if (activeProf.syncEnabled && activeProf.sheetUrl) {
+          pullFromGoogleSheet(activeProf.sheetUrl);
+        }
+      } else {
+        const isSyncOn = localStorage.getItem("swimpool_sheet_sync_enabled") === "true";
+        const sheetUrl = getInitialGoogleSheetUrl();
+        if (isSyncOn && sheetUrl) {
+          pullFromGoogleSheet(sheetUrl);
+        }
       }
-    } else {
-      const isSyncOn = localStorage.getItem("swimpool_sheet_sync_enabled") === "true";
-      const sheetUrl = getInitialGoogleSheetUrl();
-      if (isSyncOn && sheetUrl) {
-        pullFromGoogleSheet(sheetUrl);
-      }
-    }
+    };
+
+    initApp();
   }, []);
 
   // Save updates helper under active company profile index
-  const saveMembersList = (updated: Member[]) => {
+  const saveMembersList = async (updated: Member[]) => {
     setMembers(updated);
     const activeProfId = localStorage.getItem("swimpool_active_profile_id") || "default";
     const dbKey = activeProfId === "default" ? "swimpool_member_db" : `swimpool_member_db_${activeProfId}`;
     localStorage.setItem(dbKey, JSON.stringify(updated));
+
+    // Save to server
+    try {
+      await fetch(`/api/members/${activeProfId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ members: updated })
+      });
+    } catch (e) {
+      console.warn("Failed to push members to server:", e);
+    }
     
     // Auto-sync push if enabled
     const activeProf = profiles.find(p => p.id === activeProfId);
@@ -391,24 +424,51 @@ export default function App() {
     }
   };
 
-  const handleSwitchProfile = (profileId: string) => {
+  const handleSwitchProfile = async (profileId: string) => {
     setActiveProfileId(profileId);
     localStorage.setItem("swimpool_active_profile_id", profileId);
+    saveSystemSettingsOnServer(profiles, profileId, lang);
 
-    const dbKey = profileId === "default" ? "swimpool_member_db" : `swimpool_member_db_${profileId}`;
-    const stored = localStorage.getItem(dbKey);
+    // Fetch members list for this profile first from backend if possible, with local fallback
     let currentLocal: Member[] = [];
-    if (stored) {
-      try {
-        currentLocal = JSON.parse(stored);
-      } catch (e) {
+    try {
+      const response = await fetch(`/api/members/${profileId}`);
+      const json = await response.json();
+      if (json.status === "ok" && json.members) {
+        currentLocal = json.members;
+      } else {
+        // Fallback to local
+        const dbKey = profileId === "default" ? "swimpool_member_db" : `swimpool_member_db_${profileId}`;
+        const stored = localStorage.getItem(dbKey);
+        if (stored) {
+          currentLocal = JSON.parse(stored);
+        } else {
+          currentLocal = INITIAL_MOCK_MEMBERS;
+        }
+        // Save on server
+        await fetch(`/api/members/${profileId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ members: currentLocal })
+        });
+      }
+    } catch (e) {
+      const dbKey = profileId === "default" ? "swimpool_member_db" : `swimpool_member_db_${profileId}`;
+      const stored = localStorage.getItem(dbKey);
+      if (stored) {
+        try {
+          currentLocal = JSON.parse(stored);
+        } catch (err) {
+          currentLocal = INITIAL_MOCK_MEMBERS;
+        }
+      } else {
         currentLocal = INITIAL_MOCK_MEMBERS;
       }
-    } else {
-      currentLocal = INITIAL_MOCK_MEMBERS;
-      localStorage.setItem(dbKey, JSON.stringify(INITIAL_MOCK_MEMBERS));
     }
+
     setMembers(currentLocal);
+    const dbKey = profileId === "default" ? "swimpool_member_db" : `swimpool_member_db_${profileId}`;
+    localStorage.setItem(dbKey, JSON.stringify(currentLocal));
 
     // Refresh sync states matching the switched company profile
     const activeProf = profiles.find(p => p.id === profileId);
@@ -622,22 +682,13 @@ export default function App() {
                 </div>
                 <div>
                   <h1 className="text-sm font-black tracking-tight text-white">
-                    {lang === "en" ? "SEAHORSE FITNESS" : "海马游泳中心"}
+                    SEAHORSE FITNESS
                   </h1>
                   <p className="text-[9px] text-slate-400 font-bold">
-                    {lang === "en" ? "VIP VERIFICATION GATE" : "专属通行云端核验网关"}
+                    VIP VERIFICATION GATE
                   </p>
                 </div>
               </div>
-              
-              {/* Language Switch */}
-              <button
-                onClick={() => handleLangToggle()}
-                className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition cursor-pointer border border-slate-700"
-              >
-                <Languages className="h-3 w-3" />
-                <span>{lang === "en" ? "English" : "中文"}</span>
-              </button>
             </div>
 
             {/* Status Card Panel */}
@@ -664,25 +715,19 @@ export default function App() {
                     ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" 
                     : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
                 }`}>
-                  {isPassActive 
-                    ? (lang === "en" ? "PASS GRANTED / ACTIVE" : "审核通过 • 准予通行") 
-                    : (lang === "en" ? "EXPIRED / ACCESS BARRED" : "通行到期 • 拒绝入池")
-                  }
+                  {isPassActive ? "PASS GRANTED / ACTIVE" : "EXPIRED / ACCESS BARRED"}
                 </span>
                 
                 <h2 className="text-xl font-extrabold tracking-tight text-white">
-                  {isPassActive 
-                    ? (lang === "en" ? "VALID MEMBER PASS" : "有效泳客资格卡") 
-                    : (lang === "en" ? "MEMBERSHIP EXPIRED" : "会员通行证已到期")
-                  }
+                  {isPassActive ? "VALID MEMBER PASS" : "MEMBERSHIP EXPIRED"}
                 </h2>
                 
                 <p className={`text-xs font-mono font-bold mt-2 ${
                   isPassActive ? "text-emerald-400" : "text-rose-400"
                 }`}>
                   {isPassActive 
-                    ? (lang === "en" ? `Access approved — ${rDays} days remaining` : `绿牌通行期内 — 剩余 ${rDays} 天期限`) 
-                    : (lang === "en" ? `Access barred — expired ${Math.abs(rDays)} days ago` : `拒绝出入池 — 已于 ${Math.abs(rDays)} 天前过期`)
+                    ? `Access approved — ${rDays} days remaining` 
+                    : `Access barred — expired ${Math.abs(rDays)} days ago`
                   }
                 </p>
               </div>
@@ -691,52 +736,37 @@ export default function App() {
             {/* Decoded Member Details Table */}
             <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4.5 space-y-3.5 text-xs">
               <h3 className="font-extrabold text-slate-400 text-[10px] uppercase tracking-wider border-b border-slate-800 pb-2">
-                {lang === "en" ? "Swimmer Voucher Profile" : "泳卡凭证详情"}
+                Swimmer Voucher Profile
               </h3>
               
               <div className="grid grid-cols-2 gap-y-3.5 gap-x-2">
                 <div>
-                  <span className="text-slate-500 block text-[9px] uppercase font-bold">{lang === "en" ? "Name" : "会员姓名"}</span>
+                  <span className="text-slate-500 block text-[9px] uppercase font-bold">Name</span>
                   <span className="font-extrabold text-slate-100 text-sm">{publicScanData.name}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[9px] uppercase font-bold">{lang === "en" ? "Card ID" : "通行卡号 No."}</span>
+                  <span className="text-slate-500 block text-[9px] uppercase font-bold">Card ID</span>
                   <span className="font-mono font-black text-blue-400 text-sm">{publicScanData.id}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[9px] uppercase font-bold">{lang === "en" ? "Plan Tier" : "开卡卡型计划"}</span>
-                  <span className="font-bold text-slate-200">{getNormalizedPlanName(publicScanData.plan || "", lang) || (lang === "en" ? "Standard Pass" : "专属卡型")}</span>
+                  <span className="text-slate-500 block text-[9px] uppercase font-bold">Plan Tier</span>
+                  <span className="font-bold text-slate-200">{getNormalizedPlanName(publicScanData.plan || "", "en") || "Standard Pass"}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[9px] uppercase font-bold">{lang === "en" ? "Phone" : "预留手机号"}</span>
+                  <span className="text-slate-500 block text-[9px] uppercase font-bold">Phone</span>
                   <span className="font-mono text-slate-300 font-bold">{publicScanData.phone || "N/A"}</span>
                 </div>
                 <div className="col-span-2 border-t border-slate-800/65 pt-3.5 flex justify-between font-mono text-[10.5px] text-slate-400 font-bold">
-                  <span>{lang === "en" ? "START: " : "生效日: "}{publicScanData.start}</span>
-                  <span className={isPassActive ? "text-slate-400" : "text-rose-450 text-rose-400 font-extrabold"}>{lang === "en" ? "EXPIRY: " : "结束日: "}{publicScanData.end}</span>
+                  <span>START: {publicScanData.start}</span>
+                  <span className={isPassActive ? "text-slate-400" : "text-rose-450 text-rose-400 font-extrabold"}>EXPIRY: {publicScanData.end}</span>
                 </div>
               </div>
             </div>
 
             {/* Prompt Notice */}
             <p className="text-[10px] text-slate-500 leading-relaxed font-semibold text-center uppercase tracking-wide">
-              {lang === "en" 
-                ? "This is an authentic cloud-verified Seahorse Fitness digital pass check." 
-                : "本验证由海马游泳中心数据库动态匹配，仅作安全通行防溺及合规校验使用"}
+              This is an authentic cloud-verified Seahorse Fitness digital pass check.
             </p>
-
-            {/* Action buttons */}
-            <div className="flex flex-col gap-2 pt-2">
-              <button
-                onClick={() => {
-                  setPublicScanData(null);
-                  window.history.replaceState({}, document.title, window.location.pathname);
-                }}
-                className="w-full py-3 bg-slate-800 hover:bg-slate-700 border border-slate-705 text-slate-300 font-bold rounded-xl transition cursor-pointer text-xs uppercase"
-              >
-                {lang === "en" ? "Administrative Portal Entrance" : "管理员/救生员登录通道"}
-              </button>
-            </div>
 
           </div>
         </div>
@@ -1307,9 +1337,9 @@ export default function App() {
           onClick={() => setIsVersionOpen(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 border border-blue-200/50 rounded-xl cursor-pointer transition uppercase tracking-wide text-[9.5px]"
         >
-          <span>🔔 {lang === "en" ? "v2.6 Update log: Plans Simplified & Mobile QR Fixed [Click to view]" : "v2.6版本：精简卡种、手机直接扫码核验完成 [点击查看更新日志]"}</span>
+          <span>🔔 {lang === "en" ? "v2.7 Update log: Passcards Standardized & Portal Hardened [Click to view]" : "v2.7版本：安全防护升级、通行卡模块精简 [点击查看更新日志]"}</span>
         </button>
-        <div>© 2026 {lang === "en" ? "Seahorse Fitness Inc." : "海马游泳中心"} Member Pass Terminal v2.6.</div>
+        <div>© 2026 {lang === "en" ? "Seahorse Fitness Inc." : "海马游泳中心"} Member Pass Terminal v2.7.</div>
       </footer>
 
       {/* Dialog System renderer overlays */}
@@ -1387,18 +1417,31 @@ export default function App() {
               {/* Version list items */}
               <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1 text-xs text-slate-600 font-semibold leading-relaxed">
                 
-                {/* v2.6 Latest */}
+                {/* v2.7 Latest */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-black text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">v2.6 RELEASE</span>
-                    <span className="font-mono text-slate-400 font-bold">2026-06-06 (Latest)</span>
+                    <span className="font-black text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">v2.7 RELEASE</span>
+                    <span className="font-mono text-slate-400 font-bold">2026-06-13 (Latest)</span>
                   </div>
                   <ul className="list-disc list-inside space-y-1.5 pl-1 text-slate-700">
-                    <li>💻 <strong>{lang === "en" ? "Cloudflare Pages Optimized" : "支持 Cloudflare Pages 自动构建"}</strong>: {lang === "en" ? "Webpage configured and streamlined to build beautifully on pages.dev origin namespaces." : "网页构建脚本深度适配，完美在 pages.dev 域名提供高吞吐的泳卡核验访问。"}</li>
-                    <li>📱 <strong>{lang === "en" ? "QR Redirection Error Fixed" : "修复相机直扫 URL 跳 404"}</strong>: {lang === "en" ? "Card QR value now auto-resolves dynamically to current deployment origin, avoiding legacy hardcoded GitHub Pages 404." : "核验二维码动态适应当前域名，不管用微信、抖音或 iPhone 系统相机扫码均可秒开资格证，不会再出现跳 404 无法通行的情况。"}</li>
-                    <li>💳 <strong>{lang === "en" ? "Plan Series Simplified" : "卡种期限精简 & 英文显示"}</strong>: {lang === "en" ? "Simplified plan series to keep only Month Pass, 6-Month Pass, and Year Pass, displaying in clean English for billing uniformity." : "去除了干扰性极强的低客单次卡周卡，仅保留 Month Pass、6-Month Pass 与 Year Pass，且不管系统处于中/英文模式均强制呈递专业英标文字。"}</li>
-                    <li>🛡️ <strong>{lang === "en" ? "Decoupled Local QR Check-in" : "取消内嵌扫码 / 外置免登核验"}</strong>: {lang === "en" ? "Removed legacy internal camera web views from login gates. Lifeguards can scan directly with secondary devices safely, protecting member database secrecy." : "移除了繁重且暴露后台管理密码的内嵌式摄像头扫描。救生员用私人手机直接对准实体卡一扫即可核验通关，避免不经意泄露其他常客的电话隐私。"}</li>
+                    <li>🚫 <strong>{lang === "en" ? "PDF Download Cleaned Up" : "精简通行卡 PDF 下载功能"}</strong>: {lang === "en" ? "Removed legacy erratic PDF library rendering dependencies. Standalone physical thermal and high-contrast dual-sided direct browser printing remains fully supported and flawless." : "清除了冗余且繁重的 PDF 浏览器拼合打包功能，保持纯净轻量。全面推荐采用高效率、无模糊裁切的直接双面热敏或标准网页浏览器打印。"}</li>
+                    <li>🌐 <strong>{lang === "en" ? "Verification Page Native English" : "核验页面完全标准化"}</strong>: {lang === "en" ? "Disallowed translation buttons in print layouts and public scan checks. Passes are now securely standardized to English for complete administrative authority." : "移除了移动核验通道及打印通关卡片多余的语言翻译切换按钮，默认完全使用清爽的专业英标文字，版面更规整。"}</li>
+                    <li>🔒 <strong>{lang === "en" ? "Verification security hardened" : "后台管理跳转入口清理"}</strong>: {lang === "en" ? "Deleted the portal entrance redirection buttons from the public pass scanner result screens to prevent customer-facing device exposure." : "去除了公开绿牌扫码核验页面中的「宿主管理入口」按钮，进一步规避在非授权终端上泄漏管理员页面入井线索。"}</li>
+                    <li>🧹 <strong>{lang === "en" ? "Clean Slate Membership" : "清空样本测试数据"}</strong>: {lang === "en" ? "Cleared all pre-loaded sample swiper entries so the system begins on a pristine, secure empty database state. Removed hardcoded credentials clue labels on the login portal." : "出库已清空全部预置的样本模拟泳客数据，初始化系统为空白数据库状态。同时删除了登录对话框上关于测试账号密码的干扰提示标签。"}</li>
                   </ul>
+                </div>
+
+                <hr className="border-slate-100" />
+
+                {/* v2.6 */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="font-black text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded">v2.6</span>
+                    <span className="font-mono text-slate-400">2026-06-06</span>
+                  </div>
+                  <p className="pl-1 text-slate-500 text-[11px]">
+                    {lang === "en" ? "Webpages optimized for Cloudflare Pages builds, fixed camera scanner redirection URLs, and cleaned up unused elements." : "支持 Web 构建适配，修复相机扫码重定向跳转错误，精简卡种期限，以及增加独立救生员免密扫码门禁。"}
+                  </p>
                 </div>
 
                 <hr className="border-slate-100" />
@@ -1413,6 +1456,8 @@ export default function App() {
                     {lang === "en" ? "Enabled double-sided black-and-white thermal pass-card printing templates (3\" x 2\" layouts with cutting guidelines)." : "针对低功率黑白热敏纸添加了定制级双面物理裁剪凭证版面，卡套挂装更佳。"}
                   </p>
                 </div>
+
+                <hr className="border-slate-100" />
 
                 {/* v2.4 */}
                 <div className="space-y-1">
@@ -1845,6 +1890,7 @@ function doPost(e) {
                                 setProfiles(prev => {
                                   const filtered = prev.filter(item => item.id !== p.id);
                                   localStorage.setItem("swimpool_company_profiles", JSON.stringify(filtered));
+                                  saveSystemSettingsOnServer(filtered, isActive ? "default" : activeProfileId, lang);
                                   return filtered;
                                 });
                                 // Purge keys
@@ -1895,6 +1941,7 @@ function doPost(e) {
                       setProfiles(prev => {
                         const updated = [...prev, newProf];
                         localStorage.setItem("swimpool_company_profiles", JSON.stringify(updated));
+                        saveSystemSettingsOnServer(updated, activeProfileId, lang);
                         return updated;
                       });
                       setProfileNameInput("");

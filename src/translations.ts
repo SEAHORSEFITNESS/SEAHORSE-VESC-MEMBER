@@ -30,7 +30,7 @@ export const TRANSLATIONS = {
     noLoginChannelHeading: "NO LOGIN GATEWAY",
     lifeguardNoLoginBtn: "Lifeguard Scanner (No Password)",
     lifeguardNoLoginHint: "Lifeguards can directly trigger camera scans or upload image checks here without exposing administrative list views.",
-    accountErr: "Incorrect admin username or password! Default account: Seahorse / Seahorse691121",
+    accountErr: "Incorrect admin username or password!",
 
     // Dashboard Statistics
     totalMembers: "Total Swim Members",
@@ -215,7 +215,7 @@ export const TRANSLATIONS = {
     noLoginChannelHeading: "无需登录专用通道",
     lifeguardNoLoginBtn: "救生员扫码核验通道 (免登录)",
     lifeguardNoLoginHint: "救生员可以直接在此点击调用摄像头或上传截图校验卡片日期，无需输入密码安全进入后台，防止隐私数据外泄。",
-    accountErr: "账号或密码不正确！默认测试账号: Seahorse 密码: Seahorse691121",
+    accountErr: "账号或密码不正确！",
 
     // Dashboard Statistics
     totalMembers: "在库会员总数",
