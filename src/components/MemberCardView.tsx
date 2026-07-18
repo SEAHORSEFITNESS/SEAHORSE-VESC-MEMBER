@@ -18,7 +18,7 @@ import {
   UserPlus
 } from "lucide-react";
 import { Member, SubMember } from "../types";
-import { TRANSLATIONS, getNormalizedPlanName } from "../translations";
+import { TRANSLATIONS, getNormalizedPlanName, formatCleanDate } from "../translations";
 import { motion, AnimatePresence } from "motion/react";
 
 interface MemberCardViewProps {
@@ -146,10 +146,10 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
 
         return `
           <!-- --- CARD GROUP FOR ${item.name} --- -->
-          <div class="card-group" style="page-break-inside: avoid; display: flex; flex-direction: column; gap: 15px; align-items: center; justify-content: center; margin-bottom: 25px; font-family: system-ui, -apple-system, sans-serif;">
+          <div class="card-group" style="page-break-inside: avoid; display: flex; flex-direction: column; gap: 0px; align-items: center; justify-content: center; margin-bottom: 25px; font-family: system-ui, -apple-system, sans-serif;">
             
             <!-- 1. FRONT CARD SECTION -->
-            <div class="print-card-outer" style="width: 3.1in; height: 2.1in; display: flex; justify-content: center; align-items: center; border: 1px dashed #000000; position: relative; box-sizing: border-box; padding: 0.05in; background-color: #ffffff;">
+            <div class="print-card-outer" style="width: 3.1in; height: 2.1in; display: flex; justify-content: center; align-items: center; border: 1px dashed #000000; border-bottom: none; position: relative; box-sizing: border-box; padding: 0.05in; background-color: #ffffff;">
               <div class="print-card-container" style="width: 3in !important; height: 2in !important; position: relative !important; box-sizing: border-box !important; border: 2px solid #000000 !important; border-radius: 6px !important; padding: 0px !important; color: #000000 !important; background: #ffffff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; overflow: hidden !important;">
                 
                 <!-- Company Header -->
@@ -195,7 +195,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
                 <div style="position: absolute; top: 147px; left: 12px; width: 264px; height: 40px; box-sizing: border-box;">
                   <span style="position: absolute; top: 0; left: 0; font-size: 6.5px; font-weight: 800; color: #000000; text-transform: uppercase; letter-spacing: 0.2px; font-family: system-ui, -apple-system, sans-serif; line-height: 1.1;">${dateLabel}:</span>
                   <div style="position: absolute; top: 12px; left: 0; font-size: 10.5px; font-weight: 900; font-family: monospace, SFMono-Regular, Consolas, sans-serif; color: #000000; line-height: 1.1; width: 100%;">
-                    ${member.startDate} <span style="font-weight: 800;">~</span> ${member.endDate}
+                    ${formatCleanDate(member.startDate)} <span style="font-weight: 800;">~</span> ${formatCleanDate(member.endDate)}
                   </div>
                 </div>
 
@@ -508,7 +508,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
                           {lang === "en" ? "VALID DATES DURATION" : "资格起止有效期段"}
                         </span>
                         <span className="text-[11.5px] font-black block tracking-tighter">
-                          {member.startDate} ~ {member.endDate}
+                          {formatCleanDate(member.startDate)} ~ {formatCleanDate(member.endDate)}
                         </span>
                       </div>
                     </div>
@@ -677,7 +677,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
                             SWIM PASS VALIDITY PERIOD
                           </span>
                           <span className="text-[11px] font-black block tracking-tighter">
-                            {member.startDate} ~ {member.endDate}
+                            {formatCleanDate(member.startDate)} ~ {formatCleanDate(member.endDate)}
                           </span>
                         </div>
                       </div>
@@ -777,7 +777,7 @@ export default function MemberCardView({ member, onClose, onToggleAlert, lang: i
                               SWIM PASS VALIDITY PERIOD
                             </span>
                             <span className="text-[11px] font-black block tracking-tighter">
-                              {member.startDate} ~ {member.endDate}
+                              {formatCleanDate(member.startDate)} ~ {formatCleanDate(member.endDate)}
                             </span>
                           </div>
                         </div>

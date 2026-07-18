@@ -10,7 +10,7 @@ import MemberScanner from "./components/MemberScanner";
 import MemberCardView from "./components/MemberCardView";
 import AdminLogin from "./components/AdminLogin";
 import RemindersDialog from "./components/RemindersDialog";
-import { TRANSLATIONS, getNormalizedPlanName } from "./translations";
+import { TRANSLATIONS, getNormalizedPlanName, formatCleanDate } from "./translations";
 import { 
   Plus,
   X,
@@ -167,7 +167,14 @@ export default function App() {
     setProfiles((prev) => {
       const updated = prev.map((p) => (p.id === profileId ? { ...p, ...updates } : p));
       localStorage.setItem("swimpool_company_profiles", JSON.stringify(updated));
-      saveSystemSettingsOnServer(updated, activeProfileId, lang);
+      
+      const currentActiveId = localStorage.getItem("swimpool_active_profile_id") || "default";
+      const currentLang = (localStorage.getItem("swimpool_lang") as "en" | "zh") || "en";
+      
+      setTimeout(() => {
+        saveSystemSettingsOnServer(updated, currentActiveId, currentLang);
+      }, 50);
+      
       return updated;
     });
   };
@@ -1202,9 +1209,9 @@ export default function App() {
                         {/* Validity ranges */}
                         <td className="px-5 py-4 text-slate-505 font-mono text-[11px] font-bold">
                           <div className="space-y-0.5">
-                            <span className="text-slate-400 block">{lang === "en" ? "From:" : "生效:"} {m.startDate}</span>
+                            <span className="text-slate-400 block">{lang === "en" ? "From:" : "生效:"} {formatCleanDate(m.startDate)}</span>
                             <span className={expired ? "text-rose-600 font-extrabold" : "text-slate-800"}>
-                              {lang === "en" ? "Till:" : "有效到:"} {m.endDate}
+                              {lang === "en" ? "Till:" : "有效到:"} {formatCleanDate(m.endDate)}
                             </span>
                           </div>
                         </td>

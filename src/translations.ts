@@ -454,3 +454,16 @@ export function formatPhoneNumber(val: string): string {
   return `(${digits.slice(0, 3)})${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
 }
 
+export function formatCleanDate(dateStr: string): string {
+  if (!dateStr) return "";
+  const str = String(dateStr).trim();
+  if (str.includes("T")) {
+    return str.split("T")[0];
+  }
+  if (str.includes(" ")) {
+    return str.split(" ")[0];
+  }
+  return str;
+}
+
+

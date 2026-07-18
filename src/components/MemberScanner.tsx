@@ -17,7 +17,7 @@ import {
   QrCode
 } from "lucide-react";
 import { Member } from "../types";
-import { TRANSLATIONS } from "../translations";
+import { TRANSLATIONS, formatCleanDate } from "../translations";
 import { motion, AnimatePresence } from "motion/react";
 
 interface MemberScannerProps {
@@ -440,8 +440,8 @@ export default function MemberScanner({ members, onClose, lang = "en" }: MemberS
                         <span className="font-mono font-black text-slate-800 text-sm">{scanResult.memberId}</span>
                       </div>
                       <div className="col-span-2 border-t border-emerald-100/50 pt-2 flex justify-between font-mono font-bold text-[10px] text-slate-500">
-                        <span>START 生效: {scanResult.startDate}</span>
-                        <span>EXPIRY 截止: {scanResult.endDate}</span>
+                        <span>START 生效: {formatCleanDate(scanResult.startDate)}</span>
+                        <span>EXPIRY 截止: {formatCleanDate(scanResult.endDate)}</span>
                       </div>
                     </div>
                   </div>
@@ -472,8 +472,8 @@ export default function MemberScanner({ members, onClose, lang = "en" }: MemberS
                         <span className="font-mono font-bold text-slate-800">{scanResult.memberId}</span>
                       </div>
                       <div className="col-span-2 border-t border-rose-100/50 pt-2 flex justify-between font-mono font-bold text-[10px] text-slate-500">
-                        <span>START: {scanResult.startDate}</span>
-                        <span>EXPIRY: {scanResult.endDate}</span>
+                        <span>START: {formatCleanDate(scanResult.startDate)}</span>
+                        <span>EXPIRY: {formatCleanDate(scanResult.endDate)}</span>
                       </div>
                     </div>
                   </div>
