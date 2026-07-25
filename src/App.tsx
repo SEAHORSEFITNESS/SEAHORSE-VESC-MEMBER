@@ -47,9 +47,10 @@ const getInitialGoogleSheetUrl = (): string => {
   const obfuscatedVal = localStorage.getItem("_sys_cfg_sync_stream_");
   if (obfuscatedVal) {
     try {
-      return atob(obfuscatedVal);
+      const decoded = atob(obfuscatedVal);
+      if (decoded) return decoded;
     } catch (e) {
-      return obfuscatedVal;
+      if (obfuscatedVal) return obfuscatedVal;
     }
   }
   const legacyVal = localStorage.getItem("swimpool_google_sheet_url") || "";
@@ -60,7 +61,7 @@ const getInitialGoogleSheetUrl = (): string => {
     localStorage.removeItem("swimpool_google_sheet_url");
     return legacyVal;
   }
-  return "";
+  return "https://script.google.com/macros/s/AKfycbwqgIOCF6ijfC191aEUZzBqaeRm8orcJYSKZB_ZambnkivYJkkHAKtY9GKen7w5CIMpOQ/exec";
 };
 
 const saveObfuscatedGoogleSheetUrl = (url: string) => {
@@ -92,7 +93,19 @@ export default function App() {
     const raw = localStorage.getItem("swimpool_company_profiles");
     if (raw) {
       try {
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        let updated = false;
+        const mapped = parsed.map((p: any) => {
+          if (p.id === "default" && !p.sheetUrl) {
+            updated = true;
+            return { ...p, sheetUrl: "https://script.google.com/macros/s/AKfycbwqgIOCF6ijfC191aEUZzBqaeRm8orcJYSKZB_ZambnkivYJkkHAKtY9GKen7w5CIMpOQ/exec" };
+          }
+          return p;
+        });
+        if (updated) {
+          localStorage.setItem("swimpool_company_profiles", JSON.stringify(mapped));
+        }
+        return mapped;
       } catch (e) {
         // Fallback below
       }
@@ -102,7 +115,7 @@ export default function App() {
         id: "default",
         name: "Seahorse Fitness Inc (海马游泳中心)",
         isDefault: true,
-        sheetUrl: "",
+        sheetUrl: "https://script.google.com/macros/s/AKfycbwqgIOCF6ijfC191aEUZzBqaeRm8orcJYSKZB_ZambnkivYJkkHAKtY9GKen7w5CIMpOQ/exec",
         syncEnabled: false,
         lastSyncedTime: ""
       }
@@ -385,12 +398,13 @@ export default function App() {
       // Sync active profile's spreadsheet options
       const activeProf = currentProfiles.find(p => p.id === currentActiveId);
       if (activeProf) {
-        setGoogleSheetUrl(activeProf.sheetUrl || "");
+        const fallbackUrl = activeProf.sheetUrl || getInitialGoogleSheetUrl();
+        setGoogleSheetUrl(fallbackUrl);
         setSyncEnabled(!!activeProf.syncEnabled);
         setLastSyncedTime(activeProf.lastSyncedTime || "");
 
-        if (activeProf.syncEnabled && activeProf.sheetUrl) {
-          pullFromGoogleSheet(activeProf.sheetUrl);
+        if (activeProf.syncEnabled && fallbackUrl) {
+          pullFromGoogleSheet(fallbackUrl);
         }
       } else {
         const isSyncOn = localStorage.getItem("swimpool_sheet_sync_enabled") === "true";
@@ -425,7 +439,7 @@ export default function App() {
     // Auto-sync push if enabled
     const activeProf = profiles.find(p => p.id === activeProfId);
     const isSyncOn = activeProf ? !!activeProf.syncEnabled : (localStorage.getItem("swimpool_sheet_sync_enabled") === "true");
-    const sheetUrl = activeProf ? (activeProf.sheetUrl || "") : getInitialGoogleSheetUrl();
+    const sheetUrl = activeProf ? (activeProf.sheetUrl || getInitialGoogleSheetUrl()) : getInitialGoogleSheetUrl();
     if (isSyncOn && sheetUrl) {
       pushToGoogleSheet(updated, sheetUrl);
     }
@@ -480,14 +494,15 @@ export default function App() {
     // Refresh sync states matching the switched company profile
     const activeProf = profiles.find(p => p.id === profileId);
     if (activeProf) {
-      setGoogleSheetUrl(activeProf.sheetUrl || "");
+      const fallbackUrl = activeProf.sheetUrl || getInitialGoogleSheetUrl();
+      setGoogleSheetUrl(fallbackUrl);
       setSyncEnabled(!!activeProf.syncEnabled);
       setLastSyncedTime(activeProf.lastSyncedTime || "");
-      saveObfuscatedGoogleSheetUrl(activeProf.sheetUrl || "");
+      saveObfuscatedGoogleSheetUrl(fallbackUrl);
       localStorage.setItem("swimpool_sheet_sync_enabled", activeProf.syncEnabled ? "true" : "false");
       localStorage.setItem("swimpool_last_synced_time", activeProf.lastSyncedTime || "");
     } else {
-      setGoogleSheetUrl("");
+      setGoogleSheetUrl(getInitialGoogleSheetUrl());
       setSyncEnabled(false);
       setLastSyncedTime("");
     }
@@ -1424,13 +1439,28 @@ export default function App() {
               {/* Version list items */}
               <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1 text-xs text-slate-600 font-semibold leading-relaxed">
                 
-                {/* v2.7 Latest */}
+                {/* v2.8 Latest */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-black text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">v2.7 RELEASE</span>
-                    <span className="font-mono text-slate-400 font-bold">2026-06-13 (Latest)</span>
+                    <span className="font-black text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">v2.8 RELEASE</span>
+                    <span className="font-mono text-slate-400 font-bold">2026-07-18 (Latest)</span>
                   </div>
-                  <ul className="list-disc list-inside space-y-1.5 pl-1 text-slate-700">
+                  <ul className="list-disc list-inside space-y-1.5 pl-1 text-slate-750">
+                    <li>📊 <strong>{lang === "en" ? "Default Google Sheet Sync" : "默认谷歌表格云同步"}</strong>: {lang === "en" ? "Integrated pre-configured Google Sheets connection macro URL for Seahorse Fitness Inc, enabling seamless, out-of-the-box member synchronization." : "默认预置了海马游泳中心（Seahorse Fitness）的专属谷歌表格宏连接 URL，实现即开即用的云端同步体验。"}</li>
+                    <li>📅 <strong>{lang === "en" ? "Clean Date Formatting" : "标准干净日期格式"}</strong>: {lang === "en" ? "Refined pass validity dates on printed passes, member cards, admin tables, and scanners to format cleanly as standard YYYY-MM-DD." : "在打印通关卡、会员卡、管理表单和核验扫码端，全面将有效期日期格式优化为清爽的 YYYY-MM-DD。"}</li>
+                    <li>💾 <strong>{lang === "en" ? "Multi-Profile Stability" : "多配置稳定性优化"}</strong>: {lang === "en" ? "Hardened profile settings and session switching fallbacks to ensure sync URL credentials persist flawlessly across cache reloads." : "对多店、多区域配置切换及状态缓存进行了鲁棒性加固，避免由于清除缓存导致云端同步地址丢失。"}</li>
+                  </ul>
+                </div>
+
+                <hr className="border-slate-100" />
+
+                {/* v2.7 */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-black text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">v2.7</span>
+                    <span className="font-mono text-slate-400 font-bold">2026-06-13</span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-1.5 pl-1 text-slate-500">
                     <li>🚫 <strong>{lang === "en" ? "PDF Download Cleaned Up" : "精简通行卡 PDF 下载功能"}</strong>: {lang === "en" ? "Removed legacy erratic PDF library rendering dependencies. Standalone physical thermal and high-contrast dual-sided direct browser printing remains fully supported and flawless." : "清除了冗余且繁重的 PDF 浏览器拼合打包功能，保持纯净轻量。全面推荐采用高效率、无模糊裁切的直接双面热敏或标准网页浏览器打印。"}</li>
                     <li>🌐 <strong>{lang === "en" ? "Verification Page Native English" : "核验页面完全标准化"}</strong>: {lang === "en" ? "Disallowed translation buttons in print layouts and public scan checks. Passes are now securely standardized to English for complete administrative authority." : "移除了移动核验通道及打印通关卡片多余的语言翻译切换按钮，默认完全使用清爽的专业英标文字，版面更规整。"}</li>
                     <li>🔒 <strong>{lang === "en" ? "Verification security hardened" : "后台管理跳转入口清理"}</strong>: {lang === "en" ? "Deleted the portal entrance redirection buttons from the public pass scanner result screens to prevent customer-facing device exposure." : "去除了公开绿牌扫码核验页面中的「宿主管理入口」按钮，进一步规避在非授权终端上泄漏管理员页面入井线索。"}</li>
