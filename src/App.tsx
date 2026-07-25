@@ -10,7 +10,7 @@ import MemberScanner from "./components/MemberScanner";
 import MemberCardView from "./components/MemberCardView";
 import AdminLogin from "./components/AdminLogin";
 import RemindersDialog from "./components/RemindersDialog";
-import { TRANSLATIONS, getNormalizedPlanName, formatCleanDate } from "./translations";
+import { TRANSLATIONS, getNormalizedPlanName, formatCleanDate, sanitizeMember } from "./translations";
 import { 
   Plus,
   X,
@@ -73,7 +73,7 @@ const saveObfuscatedGoogleSheetUrl = (url: string) => {
   }
 };
 
-export default function App() {
+function App() {
   // Global Bilingual System State defaulting to english as instructed
   const [lang, setLang] = useState<"en" | "zh">(() => {
     return (localStorage.getItem("swimpool_lang") as "en" | "zh") || "en";
@@ -203,11 +203,19 @@ export default function App() {
       if (!res.ok) throw new Error(`HTTP status ${res.status}`);
       const data = await res.json();
       if (Array.isArray(data)) {
-        setMembers(data);
+        const sanitizedData = data.map((item: any, idx: number) => sanitizeMember(item, idx)).filter(Boolean);
+        setMembers(sanitizedData);
         const activeProfId = localStorage.getItem("swimpool_active_profile_id") || "default";
         const dbKey = activeProfId === "default" ? "swimpool_member_db" : `swimpool_member_db_${activeProfId}`;
-        localStorage.setItem(dbKey, JSON.stringify(data));
+        localStorage.setItem(dbKey, JSON.stringify(sanitizedData));
         
+        // Persist to server
+        fetch(`/api/members/${activeProfId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ members: sanitizedData })
+        }).catch(err => console.warn("Failed to persist pulled members to server", err));
+
         const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         setLastSyncedTime(nowStr);
         localStorage.setItem("swimpool_last_synced_time", nowStr);
@@ -351,13 +359,15 @@ export default function App() {
       }
 
       // Load members for active profiles
+      let loadedMembers: Member[] = [];
       try {
         const membersRes = await fetch(`/api/members/${currentActiveId}`);
         const membersJson = await membersRes.json();
-        if (membersJson.status === "ok" && membersJson.members) {
-          setMembers(membersJson.members);
+        if (membersJson.status === "ok" && Array.isArray(membersJson.members)) {
+          loadedMembers = membersJson.members.map((item: any, idx: number) => sanitizeMember(item, idx)).filter(Boolean);
+          setMembers(loadedMembers);
           const dbKey = currentActiveId === "default" ? "swimpool_member_db" : `swimpool_member_db_${currentActiveId}`;
-          localStorage.setItem(dbKey, JSON.stringify(membersJson.members));
+          localStorage.setItem(dbKey, JSON.stringify(loadedMembers));
         } else {
           // If no members on backend, push whatever is in localStorage
           const dbKey = currentActiveId === "default" ? "swimpool_member_db" : `swimpool_member_db_${currentActiveId}`;
@@ -365,18 +375,22 @@ export default function App() {
           let listToPush = INITIAL_MOCK_MEMBERS;
           if (localStored) {
             try {
-              listToPush = JSON.parse(localStored);
+              const parsed = JSON.parse(localStored);
+              if (Array.isArray(parsed)) {
+                listToPush = parsed.map((item: any, idx: number) => sanitizeMember(item, idx)).filter(Boolean);
+              }
             } catch (e) {
               listToPush = INITIAL_MOCK_MEMBERS;
             }
           }
-          setMembers(listToPush);
-          localStorage.setItem(dbKey, JSON.stringify(listToPush));
+          loadedMembers = listToPush;
+          setMembers(loadedMembers);
+          localStorage.setItem(dbKey, JSON.stringify(loadedMembers));
           
           await fetch(`/api/members/${currentActiveId}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ members: listToPush })
+            body: JSON.stringify({ members: loadedMembers })
           });
         }
       } catch (err) {
@@ -386,31 +400,38 @@ export default function App() {
         const stored = localStorage.getItem(dbKey);
         if (stored) {
           try {
-            setMembers(JSON.parse(stored));
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) {
+              loadedMembers = parsed.map((item: any, idx: number) => sanitizeMember(item, idx)).filter(Boolean);
+            } else {
+              loadedMembers = INITIAL_MOCK_MEMBERS;
+            }
           } catch (e) {
-            setMembers(INITIAL_MOCK_MEMBERS);
+            loadedMembers = INITIAL_MOCK_MEMBERS;
           }
         } else {
-          setMembers(INITIAL_MOCK_MEMBERS);
+          loadedMembers = INITIAL_MOCK_MEMBERS;
         }
+        setMembers(loadedMembers);
       }
 
       // Sync active profile's spreadsheet options
       const activeProf = currentProfiles.find(p => p.id === currentActiveId);
+      const fallbackUrl = activeProf?.sheetUrl || getInitialGoogleSheetUrl();
+
       if (activeProf) {
-        const fallbackUrl = activeProf.sheetUrl || getInitialGoogleSheetUrl();
         setGoogleSheetUrl(fallbackUrl);
         setSyncEnabled(!!activeProf.syncEnabled);
         setLastSyncedTime(activeProf.lastSyncedTime || "");
 
-        if (activeProf.syncEnabled && fallbackUrl) {
+        // Auto pull if sync is enabled or if current loaded database is empty
+        if ((activeProf.syncEnabled || loadedMembers.length === 0) && fallbackUrl) {
           pullFromGoogleSheet(fallbackUrl);
         }
       } else {
         const isSyncOn = localStorage.getItem("swimpool_sheet_sync_enabled") === "true";
-        const sheetUrl = getInitialGoogleSheetUrl();
-        if (isSyncOn && sheetUrl) {
-          pullFromGoogleSheet(sheetUrl);
+        if ((isSyncOn || loadedMembers.length === 0) && fallbackUrl) {
+          pullFromGoogleSheet(fallbackUrl);
         }
       }
     };
@@ -420,17 +441,18 @@ export default function App() {
 
   // Save updates helper under active company profile index
   const saveMembersList = async (updated: Member[]) => {
-    setMembers(updated);
+    const sanitized = updated.map((item: any, idx: number) => sanitizeMember(item, idx)).filter(Boolean);
+    setMembers(sanitized);
     const activeProfId = localStorage.getItem("swimpool_active_profile_id") || "default";
     const dbKey = activeProfId === "default" ? "swimpool_member_db" : `swimpool_member_db_${activeProfId}`;
-    localStorage.setItem(dbKey, JSON.stringify(updated));
+    localStorage.setItem(dbKey, JSON.stringify(sanitized));
 
     // Save to server
     try {
       await fetch(`/api/members/${activeProfId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ members: updated })
+        body: JSON.stringify({ members: sanitized })
       });
     } catch (e) {
       console.warn("Failed to push members to server:", e);
@@ -441,7 +463,7 @@ export default function App() {
     const isSyncOn = activeProf ? !!activeProf.syncEnabled : (localStorage.getItem("swimpool_sheet_sync_enabled") === "true");
     const sheetUrl = activeProf ? (activeProf.sheetUrl || getInitialGoogleSheetUrl()) : getInitialGoogleSheetUrl();
     if (isSyncOn && sheetUrl) {
-      pushToGoogleSheet(updated, sheetUrl);
+      pushToGoogleSheet(sanitized, sheetUrl);
     }
   };
 
@@ -455,14 +477,23 @@ export default function App() {
     try {
       const response = await fetch(`/api/members/${profileId}`);
       const json = await response.json();
-      if (json.status === "ok" && json.members) {
-        currentLocal = json.members;
+      if (json.status === "ok" && Array.isArray(json.members)) {
+        currentLocal = json.members.map((item: any, idx: number) => sanitizeMember(item, idx)).filter(Boolean);
       } else {
         // Fallback to local
         const dbKey = profileId === "default" ? "swimpool_member_db" : `swimpool_member_db_${profileId}`;
         const stored = localStorage.getItem(dbKey);
         if (stored) {
-          currentLocal = JSON.parse(stored);
+          try {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) {
+              currentLocal = parsed.map((item: any, idx: number) => sanitizeMember(item, idx)).filter(Boolean);
+            } else {
+              currentLocal = INITIAL_MOCK_MEMBERS;
+            }
+          } catch (e) {
+            currentLocal = INITIAL_MOCK_MEMBERS;
+          }
         } else {
           currentLocal = INITIAL_MOCK_MEMBERS;
         }
@@ -478,7 +509,12 @@ export default function App() {
       const stored = localStorage.getItem(dbKey);
       if (stored) {
         try {
-          currentLocal = JSON.parse(stored);
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            currentLocal = parsed.map((item: any, idx: number) => sanitizeMember(item, idx)).filter(Boolean);
+          } else {
+            currentLocal = INITIAL_MOCK_MEMBERS;
+          }
         } catch (err) {
           currentLocal = INITIAL_MOCK_MEMBERS;
         }
@@ -557,8 +593,11 @@ export default function App() {
   const todayStr = new Date().toISOString().split("T")[0];
   const todayMs = new Date(todayStr).getTime();
 
-  const getDaysRemaining = (endStr: string) => {
-    const endMs = new Date(endStr).getTime();
+  const getDaysRemaining = (endStr: any) => {
+    if (!endStr) return -9999;
+    const cleanDateStr = formatCleanDate(endStr);
+    const endMs = new Date(cleanDateStr).getTime();
+    if (isNaN(endMs)) return -9999;
     return Math.ceil((endMs - todayMs) / (1000 * 3600 * 24));
   };
 
@@ -651,19 +690,26 @@ export default function App() {
 
   // Filter members list based on UI inputs
   const filteredMembers = members.filter(m => {
+    if (!m) return false;
     // 1. Text lookup by Id, Parent Swimmer Name, Phone, and child (sub-members) name list too!
     const textQuery = searchQuery.toLowerCase().trim();
+    const nameStr = String(m.name || "").toLowerCase();
+    const idStr = String(m.id || "").toLowerCase();
+    const phoneStr = String(m.phone || "");
+
     let matchesText = 
-      m.name.toLowerCase().includes(textQuery) ||
-      m.id.toLowerCase().includes(textQuery) ||
-      m.phone.includes(textQuery);
+      nameStr.includes(textQuery) ||
+      idStr.includes(textQuery) ||
+      phoneStr.includes(textQuery);
 
     // Deep search sub-members of family plan so lookups hit family companions instantly
-    if (!matchesText && m.subMembers) {
+    if (!matchesText && Array.isArray(m.subMembers)) {
       matchesText = m.subMembers.some(sub => 
-        sub.name.toLowerCase().includes(textQuery) || 
-        sub.id.toLowerCase().includes(textQuery) ||
-        (sub.phone && sub.phone.includes(textQuery))
+        sub && (
+          String(sub.name || "").toLowerCase().includes(textQuery) || 
+          String(sub.id || "").toLowerCase().includes(textQuery) ||
+          (sub.phone && String(sub.phone).includes(textQuery))
+        )
       );
     }
 
@@ -1162,10 +1208,11 @@ export default function App() {
                     const daysRemaining = getDaysRemaining(m.endDate);
                     const expired = daysRemaining < 0;
                     
-                    const isFamilyPlan = m.plan.toLowerCase().includes("family") || m.plan.includes("家庭");
-                    const isAnnual = m.plan.toLowerCase().includes("annual") || m.plan.includes("年卡");
-                    const isSeason = m.plan.toLowerCase().includes("quarter") || m.plan.includes("季卡") || m.plan.includes("半年");
-                    const isMonth = m.plan.toLowerCase().includes("month") || m.plan.includes("月卡");
+                    const planStr = String(m.plan || "");
+                    const isFamilyPlan = planStr.toLowerCase().includes("family") || planStr.includes("家庭");
+                    const isAnnual = planStr.toLowerCase().includes("annual") || planStr.includes("年卡");
+                    const isSeason = planStr.toLowerCase().includes("quarter") || planStr.includes("季卡") || planStr.includes("半年");
+                    const isMonth = planStr.toLowerCase().includes("month") || planStr.includes("月卡");
 
                     return (
                       <tr 
@@ -2031,5 +2078,74 @@ function doPost(e) {
       `}</style>
 
     </div>
+  );
+}
+
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  declare props: ErrorBoundaryProps;
+  state: ErrorBoundaryState = { hasError: false, error: null };
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("React ErrorBoundary caught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center p-6 font-sans">
+          <div className="max-w-md w-full bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-2xl text-center space-y-4">
+            <div className="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto font-bold text-xl">
+              !
+            </div>
+            <h2 className="text-lg font-black text-white">界面显示异常 / Rendering Error</h2>
+            <p className="text-xs text-slate-300">
+              {this.state.error?.message || "数据加载过程中遭遇未预期的数据格式，已保护页面防止崩塌。"}
+            </p>
+            <div className="pt-2 flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  window.location.reload();
+                }}
+                className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-lg"
+              >
+                刷新页面 / Refresh Page
+              </button>
+              <button
+                onClick={() => {
+                  localStorage.clear();
+                  window.location.reload();
+                }}
+                className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-xs rounded-xl transition cursor-pointer"
+              >
+                重置本地缓存 / Clear Cache & Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+export default function AppWithErrorBoundary() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   );
 }

@@ -376,9 +376,11 @@ export const TRANSLATIONS = {
   }
 };
 
-export function getNormalizedPlanName(plan: string, lang: "en" | "zh"): string {
-  if (!plan) return "";
-  const normalized = plan.toLowerCase().trim();
+export function getNormalizedPlanName(plan: any, lang: "en" | "zh"): string {
+  if (plan === null || plan === undefined) return "";
+  const planStr = String(plan);
+  if (!planStr) return "";
+  const normalized = planStr.toLowerCase().trim();
 
   if (lang === "en") {
     if (normalized.includes("month") || normalized.includes("月卡") || normalized.includes("月")) {
@@ -427,12 +429,13 @@ export function getNormalizedPlanName(plan: string, lang: "en" | "zh"): string {
     }
   }
 
-  return plan;
+  return planStr;
 }
 
-export function formatPhoneNumber(val: string): string {
-  if (!val) return "";
-  const digits = val.replace(/\D/g, "");
+export function formatPhoneNumber(val: any): string {
+  if (val === null || val === undefined) return "";
+  const strVal = String(val);
+  const digits = strVal.replace(/\D/g, "");
   
   if (digits.length === 10) {
     return `(${digits.slice(0, 3)})${digits.slice(3, 6)}-${digits.slice(6)}`;
@@ -454,7 +457,7 @@ export function formatPhoneNumber(val: string): string {
   return `(${digits.slice(0, 3)})${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
 }
 
-export function formatCleanDate(dateStr: string): string {
+export function formatCleanDate(dateStr: any): string {
   if (!dateStr) return "";
   const str = String(dateStr).trim();
   if (str.includes("T")) {
@@ -464,6 +467,58 @@ export function formatCleanDate(dateStr: string): string {
     return str.split(" ")[0];
   }
   return str;
+}
+
+export function sanitizeMember(raw: any, index?: number): any {
+  if (!raw || typeof raw !== "object") return null;
+  
+  const safeId = raw.id !== undefined && raw.id !== null ? String(raw.id).trim() : `SWIM-${1000 + (index || 0)}`;
+  const safeName = raw.name !== undefined && raw.name !== null ? String(raw.name).trim() : "Member";
+  const safePhone = raw.phone !== undefined && raw.phone !== null ? String(raw.phone).trim() : "";
+  const safePlan = raw.plan !== undefined && raw.plan !== null ? String(raw.plan).trim() : "Month Pass";
+  const safeStartDate = raw.startDate !== undefined && raw.startDate !== null ? String(raw.startDate).trim() : "";
+  const safeEndDate = raw.endDate !== undefined && raw.endDate !== null ? String(raw.endDate).trim() : "";
+  const safeExtraInfo = raw.extraInfo !== undefined && raw.extraInfo !== null ? String(raw.extraInfo).trim() : "";
+  const safeLastPaymentDate = raw.lastPaymentDate !== undefined && raw.lastPaymentDate !== null ? String(raw.lastPaymentDate).trim() : "";
+  const safeCreatedAt = raw.createdAt !== undefined && raw.createdAt !== null ? String(raw.createdAt).trim() : new Date().toISOString();
+  
+  let safePrice = 0;
+  if (typeof raw.price === "number") {
+    safePrice = isNaN(raw.price) ? 0 : raw.price;
+  } else if (raw.price !== undefined && raw.price !== null) {
+    safePrice = parseFloat(String(raw.price)) || 0;
+  }
+
+  const safeStatus = raw.status === "deactivated" ? "deactivated" : "active";
+
+  let safeSubMembers: any[] = [];
+  if (Array.isArray(raw.subMembers)) {
+    safeSubMembers = raw.subMembers.map((sub: any, sIdx: number) => {
+      if (!sub || typeof sub !== "object") return null;
+      return {
+        id: sub.id !== undefined && sub.id !== null ? String(sub.id).trim() : `${safeId}-${String.fromCharCode(65 + sIdx)}`,
+        name: sub.name !== undefined && sub.name !== null ? String(sub.name).trim() : "Sub Member",
+        relationship: sub.relationship !== undefined && sub.relationship !== null ? String(sub.relationship).trim() : "Family",
+        phone: sub.phone !== undefined && sub.phone !== null ? String(sub.phone).trim() : undefined,
+        createdAt: sub.createdAt !== undefined && sub.createdAt !== null ? String(sub.createdAt).trim() : new Date().toISOString()
+      };
+    }).filter(Boolean);
+  }
+
+  return {
+    id: safeId,
+    name: safeName,
+    phone: safePhone,
+    price: safePrice,
+    plan: safePlan,
+    startDate: safeStartDate,
+    endDate: safeEndDate,
+    extraInfo: safeExtraInfo,
+    lastPaymentDate: safeLastPaymentDate,
+    createdAt: safeCreatedAt,
+    status: safeStatus,
+    subMembers: safeSubMembers
+  };
 }
 
 

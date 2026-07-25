@@ -83,8 +83,9 @@ export default function MemberForm({ member, existingIds, onSave, onClose, lang 
       // Compute sequential ID
       let nextIdNum = 1001;
       const swimIds = existingIds
-        .filter(id => id.startsWith("SWIM-"))
-        .map(id => parseInt(id.replace("SWIM-", ""), 10))
+        .map(id => String(id || ""))
+        .filter(idStr => idStr.startsWith("SWIM-"))
+        .map(idStr => parseInt(idStr.replace("SWIM-", ""), 10))
         .filter(num => !isNaN(num));
 
       if (swimIds.length > 0) {
@@ -111,8 +112,9 @@ export default function MemberForm({ member, existingIds, onSave, onClose, lang 
   const generateUniqueID = () => {
     let nextIdNum = 1001;
     const swimIds = existingIds
-      .filter(id => id.startsWith("SWIM-"))
-      .map(id => parseInt(id.replace("SWIM-", ""), 10))
+      .map(id => String(id || ""))
+      .filter(idStr => idStr.startsWith("SWIM-"))
+      .map(idStr => parseInt(idStr.replace("SWIM-", ""), 10))
       .filter(num => !isNaN(num));
 
     if (swimIds.length > 0) {

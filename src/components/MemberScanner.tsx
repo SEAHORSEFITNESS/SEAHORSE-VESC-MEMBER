@@ -253,13 +253,13 @@ export default function MemberScanner({ members, onClose, lang = "en" }: MemberS
     }
 
     // Lookup matching database records
-    let matchedMember = members.find(m => m.id.toLowerCase() === memberId.toLowerCase() && memberId !== "");
+    let matchedMember = members.find(m => String(m.id || "").toLowerCase() === memberId.toLowerCase() && memberId !== "");
     let matchedSubMember: any = null;
 
     if (!matchedMember && memberId) {
       for (const m of members) {
-        if (m.subMembers) {
-          const foundSub = m.subMembers.find(s => s.id.toLowerCase() === memberId.toLowerCase());
+        if (Array.isArray(m.subMembers)) {
+          const foundSub = m.subMembers.find(s => s && String(s.id || "").toLowerCase() === memberId.toLowerCase());
           if (foundSub) {
             matchedMember = m;
             matchedSubMember = foundSub;
@@ -270,11 +270,11 @@ export default function MemberScanner({ members, onClose, lang = "en" }: MemberS
     }
 
     if (!matchedMember && name) {
-      matchedMember = members.find(m => m.name.trim() === name.trim());
+      matchedMember = members.find(m => String(m.name || "").trim() === name.trim());
       if (!matchedMember) {
         for (const m of members) {
-          if (m.subMembers) {
-            const foundSub = m.subMembers.find(s => s.name.trim() === name.trim());
+          if (Array.isArray(m.subMembers)) {
+            const foundSub = m.subMembers.find(s => s && String(s.name || "").trim() === name.trim());
             if (foundSub) {
               matchedMember = m;
               matchedSubMember = foundSub;
